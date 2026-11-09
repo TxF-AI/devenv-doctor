@@ -1,6 +1,6 @@
 # DevEnv Doctor (v0.2.0)
 
-🇬🇧 [English version](README.en.md)
+🇫🇷 [Version française](README.fr.md)
 
 [![Latest Release](https://img.shields.io/github/v/release/TxF-AI/devenv-doctor?label=Latest%20Release&color=00e5ff)](https://github.com/TxF-AI/devenv-doctor/releases/latest)
 ![Size](https://img.shields.io/badge/Size-4.5%20MB-1e2230)
@@ -8,102 +8,100 @@
 ![Tech Stack](https://img.shields.io/badge/Tech%20Stack-Rust%20%2B%20Tauri%20v2-f74c00)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Gestionnaire et nettoyeur intelligent du `PATH` Windows et des variables d'environnement.**
+**A smart manager and cleaner for the Windows `PATH` and environment variables.**
 
-Au fil des installations (Python, Node, Java, Git, SDK…), le `PATH` se remplit de dossiers disparus, d'entrées en double et de binaires qui se masquent entre eux. DevEnv Doctor lit le Registre, te montre exactement ce qui ne va pas, puis le corrige avec un aperçu, une sauvegarde automatique et une restauration en un clic.
+Over the years of installing Python, Node, Java, Git, SDKs…, the `PATH` fills up with folders that no longer exist, duplicate entries, and binaries that shadow each other. DevEnv Doctor reads the registry, shows you exactly what is wrong, then fixes it with a preview, an automatic backup and one-click restore.
 
-Application de bureau native (Rust + Tauri v2), un seul exécutable de moins de 5 Mo. Rien n'est envoyé sur Internet.
+Native desktop app (Rust + Tauri v2), a single executable under 5 MB. Nothing is sent over the Internet. The interface is available in **French and English** (FR/EN selector in the top bar; defaults to the system language and is remembered).
 
-## 🎨 Aperçu de l'Interface
+## 🎨 Interface preview
 
-![Démonstration Animée](assets/demo.gif)
+![Animated demo](assets/demo.gif)
 
-*Démo animée (données fictives) : suppression des doublons avec aperçu « diff », puis compression du PATH (−59 caractères).*
+*Animated demo (fictitious data): duplicates removed with a "diff" preview, then PATH compression (−59 characters).*
 
 <details>
-<summary>Captures statiques</summary>
+<summary>Static screenshots</summary>
 
 <p align="center">
-  <img src="assets/ui-preview.png" alt="DevEnv Doctor : tableau du PATH avec jauges de longueur, filtres et badges" width="900">
+  <img src="assets/ui-preview.png" alt="DevEnv Doctor: PATH table with length gauges, filters and badges" width="900">
 </p>
 
-Interface **HUD cyberpunk compacte**, pensée comme un outil de développeur : fond obsidienne, accents réservés aux statuts, police monospace. Le tableau dense liste le PATH dans l'ordre de résolution de Windows, avec des **filtres dynamiques** (mot-clé, état, scope), des badges **Valide / Orphelin / Doublon / Conflit de version** (une barre rouge ou ambre sur le côté repère les lignes à traiter), les jauges de longueur du PATH et les boutons ⬆ / ⬇ de priorité.
-
-L’interface est disponible en **français et en anglais** : sélecteur FR/EN dans la barre du haut (langue du système par défaut, choix mémorisé ; messages d’erreur et script PowerShell exporté suivent la langue choisie).
+A compact **cyberpunk HUD** designed as a developer tool: obsidian background, accent colors reserved for statuses, monospace font. The dense table lists the PATH in Windows resolution order, with **dynamic filters** (keyword, state, scope), **Valid / Orphan / Duplicate / Version conflict** badges (a red or amber bar on the side flags rows that need attention), PATH length gauges and ⬆ / ⬇ priority buttons.
 
 <p align="center">
-  <img src="assets/ui-diff.png" alt="DevEnv Doctor : modale de confirmation en mode diff Git" width="640">
+  <img src="assets/ui-diff.png" alt="DevEnv Doctor: confirmation modal in Git diff style" width="640">
 </p>
 
-Avant toute écriture, une **modale de confirmation en mode « diff Git »** montre exactement ce qui sera retiré (lignes `−` en rouge, entrées inchangées repliées). Dans ces captures, le nom d'utilisateur Windows est masqué (`dev`).
+Before any write, a **"Git diff" style confirmation modal** shows exactly what will be removed (red `−` lines, unchanged entries collapsed). In these screenshots the Windows user name is masked (`dev`).
 
 </details>
 
-## Fonctionnalités
+## Features
 
-- 🧹 **Nettoyage intelligent** : détection des **orphelins** (dossiers qui n'existent plus) et des **doublons**, dans le PATH Utilisateur (HKCU) et Système (HKLM). Les entrées dont l'absence n'est pas certaine (variable non résolue, chemin réseau) sont épargnées.
-- ⚡ **Live Broadcast** : après chaque modification, DevEnv Doctor diffuse `WM_SETTINGCHANGE` à Windows. Les **nouveaux** terminaux et programmes voient le changement sans redémarrer la session (les programmes déjà ouverts gardent leur ancien environnement).
-- 📏 **PATH Compressor & Diagnostic** : longueur de HKCU, de HKLM et du PATH effectif, avec une alerte avant les limites de **1024** (`setx`), **2048** et **8192** caractères. La compression remplace `C:\Users\<nom>`, `AppData` et le dossier Windows par des variables (`%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, `%windir%`), seulement quand l'entrée devient plus courte.
-- ⚠️ **Détection des conflits** : repère les binaires de même nom présents dans plusieurs dossiers du PATH (`python.exe`, `node.exe`, `git.exe`…), indique lequel Windows lance et lesquels sont masqués. Les ⬆ / ⬇ de chaque ligne règlent la priorité.
-- 🛡️ **Sécurité & Backups** : aucune écriture sans aperçu en « diff » et confirmation. Une sauvegarde JSON est créée automatiquement dans `%APPDATA%\com.txfai.devenvdoctor\backups\`, avec **restauration en un clic**. Modifier le PATH Système demande de lancer l'application en administrateur.
-- 📜 **Export Dotfiles & PowerShell** : export du PATH et des variables utilisateur en JSON (profils et presets `Minimal Clean`, `WebDev`, `GameDev`) ou en script `setup-env.ps1` autonome pour reconfigurer un PC vierge. Les exports ne contiennent **ni secrets** (variables dont le nom évoque un token, une clé ou un mot de passe) **ni nom d'utilisateur**.
+- 🧹 **Smart cleanup**: detects **orphans** (folders that no longer exist) and **duplicates**, in both the User (HKCU) and System (HKLM) PATH. Entries whose absence is uncertain (unresolved variable, network path) are left alone.
+- ⚡ **Live broadcast**: after every change, DevEnv Doctor broadcasts `WM_SETTINGCHANGE` to Windows. **New** terminals and programs see the change without restarting the session (programs that are already open keep their old environment).
+- 📏 **PATH compressor & diagnostics**: length of HKCU, HKLM and the effective PATH, with a warning before the **1024** (`setx`), **2048** and **8192** character limits. Compression replaces `C:\Users\<name>`, `AppData` and the Windows folder with variables (`%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, `%windir%`), only when the entry becomes shorter.
+- ⚠️ **Conflict detection**: finds same-name binaries in several PATH folders (`python.exe`, `node.exe`, `git.exe`…), tells you which one Windows runs and which ones are shadowed. The ⬆ / ⬇ buttons on each row adjust priority.
+- 🛡️ **Safety & backups**: no write without a "diff" preview and confirmation. A JSON backup is created automatically in `%APPDATA%\com.txfai.devenvdoctor\backups\`, with **one-click restore**. Changing the System PATH requires running the app as administrator.
+- 📜 **Dotfiles & PowerShell export**: export the PATH and user variables as JSON (profiles and `Minimal Clean`, `WebDev`, `GameDev` presets) or as a standalone `setup-env.ps1` script to set up a fresh PC. Exports contain **no secrets** (variables whose name suggests a token, key or password) and **no user name**.
 
 ## Installation
 
-1. Télécharge l'exécutable : **[devenv-doctor.exe (v0.2.0)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.2.0/devenv-doctor.exe)** (4,5 Mo), ou consulte la page de la [Release v0.2.0](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.2.0).
-2. Vérifie son empreinte :
+1. Download the executable: **[devenv-doctor.exe (v0.2.0)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.2.0/devenv-doctor.exe)** (4.5 MB), or see the [v0.2.0 release page](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.2.0).
+2. Check its hash:
 
    ```powershell
    Get-FileHash -Algorithm SHA256 .\devenv-doctor.exe
    ```
 
-   Le résultat doit être :
+   The result must be:
 
    ```
    68E2E215D1A2B2621E404A4F0B3AF56F67F0DD4A86AB485D8070F1CD0086F986
    ```
 
-3. Double-clique sur `devenv-doctor.exe`. Aucune installation : le fichier est portable.
+3. Double-click `devenv-doctor.exe`. No installation: the file is portable.
 
-**Prérequis :** Windows 10 ou 11 (64 bits) avec Microsoft Edge WebView2, déjà présent sur Windows 11 et sur les Windows 10 à jour.
+**Requirements:** Windows 10 or 11 (64-bit) with Microsoft Edge WebView2, already present on Windows 11 and up-to-date Windows 10.
 
 > ### ⚠️ Windows SmartScreen
-> L'exécutable **n'est pas signé numériquement** (pas de certificat de signature de code). Au premier lancement, Windows peut afficher « Windows a protégé votre ordinateur » : clique sur **Informations complémentaires**, puis **Exécuter quand même**. Compare toujours l'empreinte SHA-256 ci-dessus avant de le lancer. Tu peux aussi lever le blocage avec `Unblock-File .\devenv-doctor.exe`.
+> The executable is **not digitally signed** (no code-signing certificate). On first launch Windows may show "Windows protected your PC": click **More info**, then **Run anyway**. Always compare the SHA-256 hash above before running it. You can also remove the block with `Unblock-File .\devenv-doctor.exe`.
 
-## Utilisation
+## Usage
 
-- **Onglet PATH** : un tableau unique (Système puis Utilisateur, dans l'ordre de résolution de Windows) avec l'état de chaque entrée : Valide, Orphelin, Doublon, Conflit de version. Filtre par mot-clé (`Ctrl+F`), par état ou par scope ; les compteurs du haut sont cliquables.
-- **Barre d'actions** : *Sauvegarder*, *Orphelins*, *Dédoublonner*, *Compresser*. Le sélecteur **Portée** limite l'action à l'Utilisateur, au Système ou aux deux. Chaque action ouvre un aperçu en diff avant d'écrire.
-- **Onglet Profils & Dotfiles** : export JSON, import d'un profil, export du script PowerShell, presets et liste des sauvegardes à restaurer.
-- **Script généré** : pour le tester sans rien modifier, lance
+- **PATH tab**: a single table (System then User, in Windows resolution order) with the state of each entry: Valid, Orphan, Duplicate, Version conflict. Filter by keyword (`Ctrl+F`), state or scope; the counters at the top are clickable.
+- **Action bar**: *Backup*, *Orphans*, *Deduplicate*, *Compress*. The **Scope** selector limits the action to User, System or both. Every action opens a diff preview before writing.
+- **Profiles & Dotfiles tab**: JSON export, profile import, PowerShell script export, presets and the list of backups to restore.
+- **Generated script**: to try it without changing anything, run
   `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-env.ps1 -WhatIf`
-  (`-OnlyExisting` n'ajoute que les dossiers déjà présents sur le PC).
+  (`-OnlyExisting` only adds folders that already exist on the PC).
 
-## Compiler depuis les sources
+## Build from source
 
-Prérequis : Rust (stable, MSVC), Node.js et les Build Tools C++ de Visual Studio.
+Requirements: Rust (stable, MSVC), Node.js and the Visual Studio C++ Build Tools.
 
 ```powershell
 npm install
-npm run tauri dev                          # développement
-cd src-tauri; cargo test                   # tests unitaires
+npm run tauri dev                          # development
+cd src-tauri; cargo test                   # unit tests
 cd src-tauri; cargo clippy --all-targets   # lint
-npm run tauri build -- --no-bundle         # exécutable : src-tauri\target\release\devenv-doctor.exe
+npm run tauri build -- --no-bundle         # executable: src-tauri\target\release\devenv-doctor.exe
 ```
 
-Sans `--no-bundle`, Tauri télécharge WiX et NSIS pour produire des installateurs MSI et setup.
+Without `--no-bundle`, Tauri downloads WiX and NSIS to produce MSI and setup installers.
 
 ## Structure
 
-| Chemin | Rôle |
+| Path | Role |
 |---|---|
-| `src-tauri/src/lib.rs` | lecture du Registre (PATH Utilisateur et Système), commandes Tauri |
-| `src-tauri/src/actions.rs` | sauvegardes, restauration, nettoyage, diffusion `WM_SETTINGCHANGE` |
-| `src-tauri/src/optimize.rs` | longueur du PATH, compression, réordonnancement, conflits |
-| `src-tauri/src/profiles.rs` | profils, presets, export JSON et script PowerShell |
+| `src-tauri/src/lib.rs` | registry reading (User and System PATH), Tauri commands |
+| `src-tauri/src/actions.rs` | backups, restore, cleanup, `WM_SETTINGCHANGE` broadcast |
+| `src-tauri/src/optimize.rs` | PATH length, compression, reordering, conflicts |
+| `src-tauri/src/profiles.rs` | profiles, presets, JSON and PowerShell script export |
 | `src/`, `index.html` | interface (JavaScript, Vite, Tailwind) |
-| `CLAUDE.md` | mémoire du projet : commandes, conventions et leçons apprises |
+| `CLAUDE.md` | project memory: commands, conventions and lessons learned (in French) |
 
-## 📜 Licence
+## 📜 License
 
-Ce projet est distribué sous licence **MIT** : tu peux l'utiliser, le copier, le modifier et le redistribuer librement, à condition de conserver la mention de copyright. Le texte complet est dans le fichier [LICENSE](LICENSE). Copyright (c) 2026 TxF-AI.
+This project is released under the **MIT** license: you may use, copy, modify and redistribute it freely, as long as you keep the copyright notice. The full text is in the [LICENSE](LICENSE) file. Copyright (c) 2026 TxF-AI.
