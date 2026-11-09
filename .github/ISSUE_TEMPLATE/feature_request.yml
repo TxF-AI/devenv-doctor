@@ -1,0 +1,42 @@
+name: Feature request / Proposer une fonctionnalité
+description: Une idée pour améliorer DevEnv Doctor.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème à résoudre
+      description: Quelle situation concrète te pose problème aujourd'hui ?
+      placeholder: "Quand j'installe plusieurs versions de Python, je dois ..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+      description: Comment imagines-tu que ça fonctionne (interface, comportement) ?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Contournements actuels, autres outils.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Concerne
+      options:
+        - PATH Utilisateur (HKCU)
+        - PATH Système (HKLM)
+        - Variables d'environnement
+        - Profils / export
+        - Interface
+        - Autre
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sécurité
+      options:
+        - label: Je comprends que toute écriture dans le Registre doit rester précédée d'un aperçu, d'une confirmation et d'une sauvegarde.
