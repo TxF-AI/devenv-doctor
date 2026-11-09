@@ -29,13 +29,13 @@ pub struct Risk {
 
 pub fn assess(len: usize) -> Risk {
     let (level, message) = if len >= THRESHOLDS[2] {
-        ("critical", "Critique : dépasse 8191 caractères, limite d'une ligne de commande cmd.".to_string())
+        ("critical", tr!("Critique : dépasse 8191 caractères, limite d'une ligne de commande cmd.", "Critical: exceeds 8191 characters, the cmd command-line limit.").to_string())
     } else if len >= THRESHOLDS[1] {
-        ("high", "Élevé : dépasse 2047 caractères, limite historique de certains outils.".to_string())
+        ("high", tr!("Élevé : dépasse 2047 caractères, limite historique de certains outils.", "High: exceeds 2047 characters, the historical limit of some tools.").to_string())
     } else if len >= THRESHOLDS[0] {
-        ("medium", "Attention : `setx` tronque le PATH au-delà de 1024 caractères.".to_string())
+        ("medium", tr!("Attention : `setx` tronque le PATH au-delà de 1024 caractères.", "Warning: `setx` truncates PATH beyond 1024 characters.").to_string())
     } else if len * 100 >= THRESHOLDS[0] * 85 {
-        ("near", format!("Proche du seuil `setx` (1024) : {} caractères de marge.", THRESHOLDS[0] - len))
+        ("near", tr!(format!("Proche du seuil `setx` (1024) : {} caractères de marge.", THRESHOLDS[0] - len), format!("Close to the `setx` limit (1024): {} characters of margin.", THRESHOLDS[0] - len)))
     } else {
         ("ok", "OK".to_string())
     };
@@ -131,10 +131,10 @@ fn commit_scope_edits(
     }
     let touches = |s: &str| edits.iter().any(|e| e.scope == s);
     if touches("System") && !can_write(HKEY_LOCAL_MACHINE, SYSTEM_KEY) {
-        return Err(admin_error("Modifier le PATH Système"));
+        return Err(admin_error(tr!("Modifier le PATH Système", "Modify the System PATH")));
     }
     if touches("User") && !can_write(HKEY_CURRENT_USER, USER_KEY) {
-        return Err("Écriture refusée sur HKCU\\Environment.".into());
+        return Err(tr!("Écriture refusée sur HKCU\\Environment.", "Write refused on HKCU\\Environment.").into());
     }
 
     let reused = reuse_window.and_then(|w| {
@@ -161,9 +161,9 @@ fn commit_scope_edits(
         let ty = match current.value_type.as_deref() {
             Some("REG_SZ") if !edit.new_raw.contains('%') => "REG_SZ",
             Some("REG_SZ") | Some("REG_EXPAND_SZ") => "REG_EXPAND_SZ",
-            other => return Err(format!("Type de valeur non pris en charge : {other:?}")),
+            other => return Err(tr!(format!("Type de valeur non pris en charge : {other:?}"), format!("Unsupported value type: {other:?}"))),
         };
-        write_path_value(root, key, &edit.new_raw, ty).map_err(|e| format!("{e} (sauvegarde : {file_name})"))?;
+        write_path_value(root, key, &edit.new_raw, ty).map_err(|e| format!("{e} ({}: {file_name})", tr!("sauvegarde", "backup")))?;
     }
     Ok(WriteOutcome { backup_file: Some(file_name), broadcast: broadcast_environment_change() })
 }
@@ -300,7 +300,7 @@ pub async fn compress_path(app: tauri::AppHandle, scope: String) -> Result<Compr
     let report = build_report();
     for (name, r) in [("User", &report.user), ("System", &report.system)] {
         if let (true, Some(e)) = (sel.includes(name), &r.error) {
-            return Err(format!("Lecture du PATH {name} impossible : {e}"));
+            return Err(tr!(format!("Lecture du PATH {name} impossible : {e}"), format!("Cannot read the {name} PATH: {e}")));
         }
     }
     let changes = plan_compress(&report, sel, &env_subs());
@@ -322,14 +322,14 @@ pub async fn compress_path(app: tauri::AppHandle, scope: String) -> Result<Compr
 /// Échange l'entrée `index` avec sa voisine ("up" = vers le début = plus prioritaire).
 pub fn swap_entries(entries: &[String], index: usize, direction: &str) -> Result<Vec<String>, String> {
     if index >= entries.len() {
-        return Err(format!("Position {index} hors limites ({} entrées).", entries.len()));
+        return Err(tr!(format!("Position {index} hors limites ({} entrées).", entries.len()), format!("Position {index} out of range ({} entries).", entries.len())));
     }
     let other = match direction {
         "up" if index > 0 => index - 1,
-        "up" => return Err("Cette entrée est déjà la première.".into()),
+        "up" => return Err(tr!("Cette entrée est déjà la première.", "This entry is already the first one.").into()),
         "down" if index + 1 < entries.len() => index + 1,
-        "down" => return Err("Cette entrée est déjà la dernière.".into()),
-        other => return Err(format!("Direction inconnue : {other} (attendu : up ou down)")),
+        "down" => return Err(tr!("Cette entrée est déjà la dernière.", "This entry is already the last one.").into()),
+        other => return Err(tr!(format!("Direction inconnue : {other} (attendu : up ou down)"), format!("Unknown direction: {other} (expected: up or down)"))),
     };
     let mut v = entries.to_vec();
     v.swap(index, other);
@@ -349,16 +349,16 @@ pub async fn move_path_entry(
     let scope: &'static str = match ScopeSel::parse(&scope)? {
         ScopeSel::User => "User",
         ScopeSel::System => "System",
-        ScopeSel::All => return Err("Réordonner demande un scope précis : User ou System.".into()),
+        ScopeSel::All => return Err(tr!("Réordonner demande un scope précis : User ou System.", "Reordering needs a specific scope: User or System.").into()),
     };
     let report = build_report();
     let r = scope_entries(&report, scope);
     if let Some(e) = &r.error {
-        return Err(format!("Lecture du PATH impossible : {e}"));
+        return Err(tr!(format!("Lecture du PATH impossible : {e}"), format!("Cannot read the PATH: {e}")));
     }
     let raws: Vec<String> = r.entries.iter().map(|e| e.raw_path.clone()).collect();
     if raws.get(index).map(String::as_str) != Some(expected_path.as_str()) {
-        return Err("Le PATH a changé depuis l'affichage : recharge la liste.".into());
+        return Err(tr!("Le PATH a changé depuis l'affichage : recharge la liste.", "The PATH changed since it was displayed: reload the list.").into());
     }
     let new = swap_entries(&raws, index, &direction)?;
     // 5 min : une série de déplacements ne crée qu'UNE sauvegarde (l'état d'avant la série).
@@ -505,6 +505,8 @@ mod tests {
 
     #[test]
     fn seuils_de_risque() {
+        let _l = crate::i18n::LANG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_english(false);
         let lv = |n| assess(n).level;
         assert_eq!((lv(0), lv(500), lv(870)), ("ok", "ok", "ok")); // 85 % de 1024 = 870,4
         assert_eq!((lv(871), lv(1023)), ("near", "near"));
@@ -512,6 +514,15 @@ mod tests {
         assert_eq!((lv(2048), lv(8191)), ("high", "high"));
         assert_eq!(lv(8192), "critical");
         assert!(assess(1000).message.contains("24 caractères de marge"));
+    }
+
+    #[test]
+    fn risque_en_anglais() {
+        let _l = crate::i18n::LANG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_english(true);
+        let (near, high) = (assess(1000).message, assess(3000).message);
+        crate::i18n::set_english(false);
+        assert!(near.contains("24 characters of margin") && high.starts_with("High:"));
     }
 
     #[test]

@@ -11,6 +11,7 @@
 - **Nettoyage (écriture) :** suppression des orphelins sûrs, dédoublonnage, compression (`%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, `%windir%`, seulement si plus court), réordonnancement ⬆⬇ dans un scope. Toujours : aperçu, modale « diff », sauvegarde automatique, droits vérifiés avant d'écrire (`AdminRequired` pour HKLM), puis `WM_SETTINGCHANGE`.
 - **Sauvegardes :** JSON horodaté dans `%APPDATA%\com.txfai.devenvdoctor\backups\`, restauration en un clic avec aperçu en diff (variables touchées comprises).
 - **Profils & Dotfiles :** export/import JSON (sans secrets ni nom d'utilisateur), presets `Minimal Clean` / `WebDev` / `GameDev`, application limitée à HKCU ; export `setup-env.ps1` (PC vierge, `-WhatIf`, sans droits admin).
+- **Langues (FR/EN) :** sélecteur `#lang` dans la barre du haut ; `src/i18n.js` (dictionnaires, `t()`, langue du système par défaut, mémorisée dans localStorage, attributs `data-i18n`/`-html`/`-ph`/`-title`/`-aria`) ; commande `set_language` (backend : `src-tauri/src/i18n.rs`, macro `tr!(fr, en)`). Tout nouveau texte visible = une clé dans les deux langues ; tout message d'erreur Rust = `tr!`. Le préfixe `AdminRequired:` ne change jamais. Les raisons de sauvegarde (`manuelle`, `avant-compression`…) sont des identifiants stockés dans les fichiers : traduits à l'affichage seulement (`reasonLabel`). Les textes venant du backend (risques, presets, raisons de nettoyage) sont redemandés au changement de langue ; le script `setup-env.ps1` suit la langue au moment de l'export (`PS_TEMPLATE` / `PS_TEMPLATE_EN`). Les tests qui lisent un message prennent `crate::i18n::LANG_LOCK`.
 - **Interface :** thème « HUD / dev tool » (obsidienne, accents réservés aux statuts), icônes SVG inline, LED `WM_SETTINGCHANGE` dans le pied de page.
 
 ## Commandes clés
@@ -142,3 +143,8 @@ Format d'une entrée :
 ### Outil Write sur fichier copié
 - **Problème / Erreur :** `Write` refuse d'écraser un fichier qui n'a pas été lu dans la session.
 - **Règle à appliquer :** après une copie de scaffolding, `Read` chaque fichier à remplacer avant `Write`/`Edit`.
+
+### i18n : langue globale, tests et validation UI
+- **Problème / Erreur :** la langue du backend est un `AtomicBool` global : un test EN lancé en parallèle casse les tests qui assertent du français. Et dans la fenêtre, `SendKeys {DOWN}` ne change pas le `<select>` (la liste s'ouvre sans valider ; `SendKeys` vise la fenêtre au premier plan).
+- **Solution retenue :** `LANG_LOCK` (dans `i18n.rs`, `#[cfg(test)]`) pris par tout test qui lit un message, avec `set_english(false)` au début et au retour à FR après un test EN. Pour la fenêtre : UI Automation, `ExpandCollapsePattern.Expand()` sur le ComboBox puis `SelectionItemPattern.Select()` sur l'élément de liste (les onglets `role=tab` n'ont pas `InvokePattern` : utiliser `SelectionItemPattern`). Remettre FR avant de fermer (le localStorage du WebView est partagé avec l'app installée).
+- **Règle à appliquer :** pas de Python sur cette machine : scripts de remplacement en Node (`String.raw` ne supporte pas les backticks du contenu ; passer en chaînes normales ou éditer à la main). Vérifier le registre (hash HKCU+HKLM avant/après) quand on pilote la vraie fenêtre.

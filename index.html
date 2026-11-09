@@ -11,46 +11,50 @@
     <div class="app">
       <header class="topbar">
         <div class="brand"><span data-icon="terminal" data-size="16"></span><b>devenv-doctor</b><span id="ver" class="ver">v0.1.0</span></div>
-        <nav class="nav" role="tablist" aria-label="Vues">
+        <nav class="nav" role="tablist" aria-label="Vues" data-i18n-aria="views">
           <button id="nav-path" class="navbtn" role="tab" aria-selected="true"><span data-icon="list"></span>PATH</button>
-          <button id="nav-profiles" class="navbtn" role="tab" aria-selected="false"><span data-icon="braces"></span>Profils &amp; Dotfiles</button>
+          <button id="nav-profiles" class="navbtn" role="tab" aria-selected="false"><span data-icon="braces"></span><span data-i18n="nav_profiles"></span></button>
         </nav>
         <div id="admin-pill" class="pill" role="status"></div>
+        <select id="lang" class="input lang" data-i18n-title="language" data-i18n-aria="language">
+          <option value="fr">FR</option>
+          <option value="en">EN</option>
+        </select>
       </header>
 
-      <section class="toolbar" aria-label="Actions">
-        <button id="btn-backup" class="btn primary" title="Enregistrer l'état actuel du PATH"><span data-icon="shield-check"></span>Sauvegarder</button>
+      <section class="toolbar" aria-label="Actions" data-i18n-aria="actions_label">
+        <button id="btn-backup" class="btn primary" data-i18n-title="btn_backup_title"><span data-icon="shield-check"></span><span data-i18n="btn_backup"></span></button>
         <span class="sep"></span>
-        <button id="btn-orphans" class="btn bad" title="Retirer les entrées dont le dossier n'existe plus"><span data-icon="eraser"></span>Orphelins <span class="count" id="cnt-orphans">0</span></button>
-        <button id="btn-dups" class="btn warn" title="Garder la première occurrence de chaque chemin"><span data-icon="git-merge"></span>Dédoublonner <span class="count" id="cnt-dups">0</span></button>
-        <button id="btn-compress" class="btn info" title="Remplacer C:\Users\&lt;nom&gt;, AppData et le dossier Windows par des variables (%USERPROFILE%, %LOCALAPPDATA%, %windir%…) pour raccourcir le PATH"><span data-icon="shrink"></span>Compresser <span class="count" id="cnt-compress">0</span></button>
+        <button id="btn-orphans" class="btn bad" data-i18n-title="btn_orphans_title"><span data-icon="eraser"></span><span data-i18n="btn_orphans"></span> <span class="count" id="cnt-orphans">0</span></button>
+        <button id="btn-dups" class="btn warn" data-i18n-title="btn_dups_title"><span data-icon="git-merge"></span><span data-i18n="btn_dups"></span> <span class="count" id="cnt-dups">0</span></button>
+        <button id="btn-compress" class="btn info" data-i18n-title="btn_compress_title"><span data-icon="shrink"></span><span data-i18n="btn_compress"></span> <span class="count" id="cnt-compress">0</span></button>
         <span class="sep"></span>
-        <label class="lbl" for="scope-select">Portée</label>
+        <label class="lbl" for="scope-select" data-i18n="scope_label"></label>
         <select id="scope-select" class="input">
-          <option value="All">Tout</option>
-          <option value="User">Utilisateur</option>
-          <option value="System">Système</option>
+          <option value="All" data-i18n="scope_All"></option>
+          <option value="User" data-i18n="scope_User"></option>
+          <option value="System" data-i18n="scope_System"></option>
         </select>
       </section>
 
       <main id="view-path" class="view" style="display:flex;flex-direction:column">
         <div id="stats" class="stats"></div>
-        <div id="lens" class="lens" aria-label="Longueur du PATH"></div>
+        <div id="lens" class="lens" data-i18n-aria="lens_aria"></div>
         <div class="filters">
           <div class="search">
             <span data-icon="search"></span>
-            <input id="q" class="input" type="text" placeholder="Filtrer : mot-clé, chemin…" aria-label="Filtrer les chemins" autocomplete="off" spellcheck="false" />
-            <button id="q-clear" class="clear hidden" aria-label="Effacer le filtre"><span data-icon="x" data-size="12"></span></button>
+            <input id="q" class="input" type="text" data-i18n-ph="filter_ph" data-i18n-aria="filter_aria" autocomplete="off" spellcheck="false" />
+            <button id="q-clear" class="clear hidden" data-i18n-aria="clear_filter"><span data-icon="x" data-size="12"></span></button>
           </div>
-          <div class="chips" role="group" aria-label="Filtrer par état" id="chips-state">
-            <button class="chip" data-v="all" aria-pressed="true">Tous</button>
-            <button class="chip" data-v="ok" aria-pressed="false">Valide</button>
-            <button class="chip" data-v="orphan" aria-pressed="false">Orphelin</button>
-            <button class="chip" data-v="dup" aria-pressed="false">Doublon</button>
-            <button class="chip" data-v="conflict" aria-pressed="false">Conflit</button>
+          <div class="chips" role="group" data-i18n-aria="chips_state" id="chips-state">
+            <button class="chip" data-v="all" aria-pressed="true" data-i18n="chip_all"></button>
+            <button class="chip" data-v="ok" aria-pressed="false" data-i18n="chip_ok"></button>
+            <button class="chip" data-v="orphan" aria-pressed="false" data-i18n="chip_orphan"></button>
+            <button class="chip" data-v="dup" aria-pressed="false" data-i18n="chip_dup"></button>
+            <button class="chip" data-v="conflict" aria-pressed="false" data-i18n="chip_conflict"></button>
           </div>
-          <div class="chips" role="group" aria-label="Filtrer par scope" id="chips-scope">
-            <button class="chip" data-v="all" aria-pressed="true">Tous scopes</button>
+          <div class="chips" role="group" data-i18n-aria="chips_scope" id="chips-scope">
+            <button class="chip" data-v="all" aria-pressed="true" data-i18n="chip_all_scopes"></button>
             <button class="chip" data-v="User" aria-pressed="false">HKCU</button>
             <button class="chip" data-v="System" aria-pressed="false">HKLM</button>
           </div>
@@ -58,42 +62,38 @@
         <div style="flex:1;min-height:0;overflow:auto">
           <table>
             <colgroup><col style="width:3px" /><col style="width:44px" /><col style="width:190px" /><col style="width:64px" /><col /><col style="width:60px" /></colgroup>
-            <thead><tr><th></th><th style="text-align:right">#</th><th>État</th><th>Scope</th><th>Chemin</th><th title="Priorité : monter ou descendre l'entrée dans son scope">Ordre</th></tr></thead>
+            <thead><tr><th></th><th style="text-align:right">#</th><th data-i18n="col_state"></th><th data-i18n="col_scope"></th><th data-i18n="col_path"></th><th data-i18n="col_order" data-i18n-title="col_order_title"></th></tr></thead>
             <tbody id="rows"></tbody>
           </table>
-          <div id="empty" class="empty hidden">Aucune entrée ne correspond au filtre.</div>
+          <div id="empty" class="empty hidden" data-i18n="empty"></div>
         </div>
       </main>
 
       <main id="view-profiles" class="view view-pad hidden">
-        <p class="help">
-          Un profil contient le PATH et les variables <b>utilisateur</b> (HKCU). Les variables dont le nom évoque un secret
-          (token, key, password…) ne sont jamais exportées, et ton nom d'utilisateur est remplacé par <code>%USERPROFILE%</code>.
-          Le PATH Système est exporté à titre informatif, jamais appliqué.
-        </p>
+        <p class="help" data-i18n-html="help_profiles"></p>
         <div class="card">
           <h2 class="h2">Dotfiles</h2>
           <div class="grid2">
-            <input id="profile-name" class="input" maxlength="64" value="Mon environnement" aria-label="Nom du profil" />
-            <input id="profile-desc" class="input" maxlength="500" placeholder="Description (facultatif)" aria-label="Description" />
+            <input id="profile-name" class="input" maxlength="64" value="Mon environnement" data-i18n-aria="profile_name_aria" />
+            <input id="profile-desc" class="input" maxlength="500" data-i18n-ph="profile_desc_ph" data-i18n-aria="profile_desc_aria" />
           </div>
           <div class="row">
-            <button id="btn-export" class="btn primary"><span data-icon="download"></span>Exporter la conf (Dotfiles)</button>
-            <button id="btn-import" class="btn info"><span data-icon="upload"></span>Importer un profil</button>
-            <button id="btn-script" class="btn" title="Script setup-env.ps1 pour reconfigurer un PC vierge, sans installer d'application"><span data-icon="scroll-text"></span>Exporter en script PowerShell (.ps1)</button>
+            <button id="btn-export" class="btn primary"><span data-icon="download"></span><span data-i18n="btn_export"></span></button>
+            <button id="btn-import" class="btn info"><span data-icon="upload"></span><span data-i18n="btn_import"></span></button>
+            <button id="btn-script" class="btn" data-i18n-title="btn_script_title"><span data-icon="scroll-text"></span><span data-i18n="btn_script"></span></button>
             <input id="file-import" type="file" accept=".json,application/json" class="hidden" />
           </div>
           <div id="export-result" class="res hidden"></div>
           <div id="script-result" class="res hidden"></div>
         </div>
-        <h2 class="h2">Presets</h2>
+        <h2 class="h2" data-i18n="h_presets"></h2>
         <ul id="presets" class="list"></ul>
-        <h2 class="h2" style="margin-top:18px">Sauvegardes</h2>
+        <h2 class="h2" style="margin-top:18px" data-i18n="h_backups"></h2>
         <ul id="backups" class="list"></ul>
       </main>
 
       <footer class="statusbar">
-        <span id="sync"><span id="led" class="led idle"></span><span id="sync-txt">WM_SETTINGCHANGE · en attente</span></span>
+        <span id="sync"><span id="led" class="led idle"></span><span id="sync-txt"></span></span>
         <span id="count-txt" class="r"></span>
       </footer>
     </div>
@@ -111,7 +111,7 @@
       </div>
       <div class="mf">
         <span id="m-note" class="note"></span>
-        <button id="m-cancel" class="btn">Annuler</button>
+        <button id="m-cancel" class="btn" data-i18n="modal_cancel"></button>
         <button id="m-ok" class="btn danger"></button>
       </div>
     </dialog>

@@ -59,7 +59,7 @@ fn count_entries(b: &Option<ScopeBackup>) -> usize {
 /// Refuse un fichier de sauvegarde douteux avant de s'en servir pour écrire.
 pub fn validate_backup(b: &Backup) -> Result<(), String> {
     if b.version != BACKUP_VERSION {
-        return Err(format!("Version de sauvegarde non prise en charge : {}", b.version));
+        return Err(tr!(format!("Version de sauvegarde non prise en charge : {}", b.version), format!("Unsupported backup version: {}", b.version)));
     }
     let vars = b.touched_variables.iter().map(|(n, s)| (n.as_str(), s));
     let scopes = [("user", &b.user), ("system", &b.system)]
@@ -68,10 +68,10 @@ pub fn validate_backup(b: &Backup) -> Result<(), String> {
     for (name, s) in scopes {
         if let Some(s) = s {
             if s.value_type != "REG_SZ" && s.value_type != "REG_EXPAND_SZ" {
-                return Err(format!("Type de valeur invalide pour {name} : {}", s.value_type));
+                return Err(tr!(format!("Type de valeur invalide pour {name} : {}", s.value_type), format!("Invalid value type for {name}: {}", s.value_type)));
             }
             if s.raw.contains('\0') {
-                return Err(format!("Valeur invalide (caractère NUL) pour {name}"));
+                return Err(tr!(format!("Valeur invalide (caractère NUL) pour {name}"), format!("Invalid value (NUL character) for {name}")));
             }
         }
     }
@@ -147,32 +147,32 @@ fn vtype_of(value_type: &str) -> Result<winreg::enums::RegType, String> {
     match value_type {
         "REG_SZ" => Ok(REG_SZ),
         "REG_EXPAND_SZ" => Ok(REG_EXPAND_SZ),
-        other => Err(format!("Type de valeur non pris en charge : {other}")),
+        other => Err(tr!(format!("Type de valeur non pris en charge : {other}"), format!("Unsupported value type: {other}"))),
     }
 }
 
 /// Écrit (ou remplace) une variable utilisateur texte. Jamais `Path` (voir `write_path_value`).
 pub(crate) fn write_user_var(name: &str, raw: &str, value_type: &str) -> Result<(), String> {
     if name.eq_ignore_ascii_case("Path") {
-        return Err("Path ne s'écrit qu'avec write_path_value".into());
+        return Err(tr!("Path ne s'écrit qu'avec write_path_value", "Path can only be written with write_path_value").into());
     }
     let vtype = vtype_of(value_type)?;
     let key = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(USER_KEY, KEY_SET_VALUE)
-        .map_err(|e| format!("Ouverture de HKCU\\Environment impossible : {e}"))?;
+        .map_err(|e| tr!(format!("Ouverture de HKCU\\Environment impossible : {e}"), format!("Cannot open HKCU\\Environment: {e}")))?;
     key.set_raw_value(name, &RegValue { bytes: Cow::Owned(encode_reg_string(raw)), vtype })
-        .map_err(|e| format!("Écriture de {name} impossible : {e}"))
+        .map_err(|e| tr!(format!("Écriture de {name} impossible : {e}"), format!("Cannot write {name}: {e}")))
 }
 
 pub(crate) fn delete_user_var(name: &str) -> Result<(), String> {
     if name.eq_ignore_ascii_case("Path") {
-        return Err("Suppression de Path refusée".into());
+        return Err(tr!("Suppression de Path refusée", "Deleting Path is refused").into());
     }
     let key = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(USER_KEY, KEY_SET_VALUE)
-        .map_err(|e| format!("Ouverture de HKCU\\Environment impossible : {e}"))?;
+        .map_err(|e| tr!(format!("Ouverture de HKCU\\Environment impossible : {e}"), format!("Cannot open HKCU\\Environment: {e}")))?;
     match key.delete_value(name) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("Suppression de {name} impossible : {e}")),
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(tr!(format!("Suppression de {name} impossible : {e}"), format!("Cannot delete {name}: {e}"))),
         _ => Ok(()),
     }
 }
@@ -209,9 +209,9 @@ pub(crate) fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("Dossier de données introuvable : {e}"))?
+        .map_err(|e| tr!(format!("Dossier de données introuvable : {e}"), format!("Data folder not found: {e}")))?
         .join("backups");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Création de {} impossible : {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| tr!(format!("Création de {} impossible : {e}", dir.display()), format!("Cannot create {}: {e}", dir.display())))?;
     Ok(dir)
 }
 
@@ -219,7 +219,7 @@ pub(crate) fn write_backup(dir: &Path, b: &Backup) -> Result<PathBuf, String> {
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S-%3f");
     let file = dir.join(format!("path-backup-{stamp}.json"));
     let json = serde_json::to_string_pretty(b).map_err(|e| e.to_string())?;
-    std::fs::write(&file, json).map_err(|e| format!("Écriture de {} impossible : {e}", file.display()))?;
+    std::fs::write(&file, json).map_err(|e| tr!(format!("Écriture de {} impossible : {e}", file.display()), format!("Cannot write {}: {e}", file.display())))?;
     Ok(file)
 }
 
@@ -229,20 +229,20 @@ fn resolve_backup_file(dir: &Path, requested: &str) -> Result<PathBuf, String> {
     let name = Path::new(requested)
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or("Nom de sauvegarde invalide")?;
+        .ok_or(tr!("Nom de sauvegarde invalide", "Invalid backup name"))?;
     if !name.ends_with(".json") {
-        return Err("La sauvegarde doit être un fichier .json".into());
+        return Err(tr!("La sauvegarde doit être un fichier .json", "The backup must be a .json file").into());
     }
     let p = dir.join(name);
     if !p.is_file() {
-        return Err(format!("Sauvegarde introuvable : {name}"));
+        return Err(tr!(format!("Sauvegarde introuvable : {name}"), format!("Backup not found: {name}")));
     }
     Ok(p)
 }
 
 fn load_backup(path: &Path) -> Result<Backup, String> {
-    let txt = std::fs::read_to_string(path).map_err(|e| format!("Lecture impossible : {e}"))?;
-    let b: Backup = serde_json::from_str(&txt).map_err(|e| format!("Sauvegarde illisible : {e}"))?;
+    let txt = std::fs::read_to_string(path).map_err(|e| tr!(format!("Lecture impossible : {e}"), format!("Cannot read: {e}")))?;
+    let b: Backup = serde_json::from_str(&txt).map_err(|e| tr!(format!("Sauvegarde illisible : {e}"), format!("Unreadable backup: {e}")))?;
     validate_backup(&b)?;
     Ok(b)
 }
@@ -271,7 +271,7 @@ pub fn can_reuse_backup(latest_reason: &str, age_secs: Option<i64>, reason: &str
 // ───────────────────────── Écriture Registre ─────────────────────────
 
 pub fn admin_error(what: &str) -> String {
-    format!("{ADMIN_REQUIRED}: {what} demande de lancer l'application en tant qu'administrateur.")
+    format!("{ADMIN_REQUIRED}: {}", tr!(format!("{what} demande de lancer l'application en tant qu'administrateur."), format!("{what} requires running the application as administrator.")))
 }
 
 pub(crate) fn can_write(root: HKEY, subkey: &str) -> bool {
@@ -288,25 +288,25 @@ pub fn write_path_value(root: HKEY, subkey: &str, raw: &str, value_type: &str) -
     let vtype = match value_type {
         "REG_SZ" => REG_SZ,
         "REG_EXPAND_SZ" => REG_EXPAND_SZ,
-        other => return Err(format!("Type de valeur non pris en charge : {other}")),
+        other => return Err(tr!(format!("Type de valeur non pris en charge : {other}"), format!("Unsupported value type: {other}"))),
     };
     if raw.trim().is_empty() {
-        return Err("Refus d'écrire un PATH vide (utiliser la restauration si besoin).".into());
+        return Err(tr!("Refus d'écrire un PATH vide (utiliser la restauration si besoin).", "Refusing to write an empty PATH (use restore if needed).").into());
     }
     let is_system = root == HKEY_LOCAL_MACHINE;
     let key = RegKey::predef(root).open_subkey_with_flags(subkey, KEY_SET_VALUE).map_err(|e| {
         if is_denied(&e) && is_system {
-            admin_error("Modifier le PATH Système")
+            admin_error(tr!("Modifier le PATH Système", "Modify the System PATH"))
         } else {
-            format!("Ouverture de la clé impossible : {e}")
+            tr!(format!("Ouverture de la clé impossible : {e}"), format!("Cannot open the key: {e}"))
         }
     })?;
     let value = RegValue { bytes: Cow::Owned(encode_reg_string(raw)), vtype };
     key.set_raw_value("Path", &value).map_err(|e| {
         if is_denied(&e) && is_system {
-            admin_error("Modifier le PATH Système")
+            admin_error(tr!("Modifier le PATH Système", "Modify the System PATH"))
         } else {
-            format!("Écriture impossible : {e}")
+            tr!(format!("Écriture impossible : {e}"), format!("Cannot write: {e}"))
         }
     })
 }
@@ -326,7 +326,7 @@ impl ScopeSel {
             "user" => Ok(Self::User),
             "system" => Ok(Self::System),
             "all" => Ok(Self::All),
-            other => Err(format!("Scope inconnu : {other} (attendu : User, System ou All)")),
+            other => Err(tr!(format!("Scope inconnu : {other} (attendu : User, System ou All)"), format!("Unknown scope: {other} (expected: User, System or All)"))),
         }
     }
     pub(crate) fn includes(self, scope: &str) -> bool {
@@ -345,7 +345,7 @@ impl Kind {
         match s {
             "orphans" => Ok(Self::Orphans),
             "duplicates" => Ok(Self::Duplicates),
-            other => Err(format!("Action inconnue : {other}")),
+            other => Err(tr!(format!("Action inconnue : {other}"), format!("Unknown action: {other}"))),
         }
     }
 }
@@ -396,13 +396,13 @@ pub fn plan_cleanup(report: &RegistryPathReport, kind: Kind, sel: ScopeSel) -> (
             let reason = match kind {
                 Kind::Orphans if !e.exists => {
                     if is_safe_orphan(e) {
-                        "Orphelin (dossier introuvable)"
+                        tr!("Orphelin (dossier introuvable)", "Orphan (folder not found)")
                     } else {
                         skipped += 1;
                         continue;
                     }
                 }
-                Kind::Duplicates if e.is_duplicate => "Doublon",
+                Kind::Duplicates if e.is_duplicate => tr!("Doublon", "Duplicate"),
                 _ => continue,
             };
             targets.push(Target {
@@ -432,7 +432,7 @@ fn run_cleanup(dir: &Path, kind: Kind, sel: ScopeSel, reason: &str) -> Result<Cl
     let report = build_report();
     for (name, r) in [("User", &report.user), ("System", &report.system)] {
         if let (true, Some(e)) = (sel.includes(name), &r.error) {
-            return Err(format!("Lecture du PATH {name} impossible : {e}"));
+            return Err(tr!(format!("Lecture du PATH {name} impossible : {e}"), format!("Cannot read the {name} PATH: {e}")));
         }
     }
     let (targets, skipped) = plan_cleanup(&report, kind, sel);
@@ -443,10 +443,10 @@ fn run_cleanup(dir: &Path, kind: Kind, sel: ScopeSel, reason: &str) -> Result<Cl
 
     // Contrôle des droits AVANT toute écriture : pas de modification partielle.
     if touches("System") && !can_write(HKEY_LOCAL_MACHINE, SYSTEM_KEY) {
-        return Err(admin_error("Modifier le PATH Système"));
+        return Err(admin_error(tr!("Modifier le PATH Système", "Modify the System PATH")));
     }
     if touches("User") && !can_write(HKEY_CURRENT_USER, USER_KEY) {
-        return Err("Écriture refusée sur HKCU\\Environment.".into());
+        return Err(tr!("Écriture refusée sur HKCU\\Environment.", "Write refused on HKCU\\Environment.").into());
     }
 
     let file = write_backup(dir, &snapshot(reason)?)?;
@@ -455,12 +455,12 @@ fn run_cleanup(dir: &Path, kind: Kind, sel: ScopeSel, reason: &str) -> Result<Cl
     if touches("System") {
         let ty = report.system.value_type.as_deref().unwrap_or_default();
         write_path_value(HKEY_LOCAL_MACHINE, SYSTEM_KEY, &new_scope_value(&report.system.entries, "System", &targets), ty)
-            .map_err(|e| format!("{e} (sauvegarde : {file_name})"))?;
+            .map_err(|e| format!("{e} ({}: {file_name})", tr!("sauvegarde", "backup")))?;
     }
     if touches("User") {
         let ty = report.user.value_type.as_deref().unwrap_or_default();
         write_path_value(HKEY_CURRENT_USER, USER_KEY, &new_scope_value(&report.user.entries, "User", &targets), ty)
-            .map_err(|e| format!("{e} (sauvegarde : {file_name})"))?;
+            .map_err(|e| format!("{e} ({}: {file_name})", tr!("sauvegarde", "backup")))?;
     }
     // Écriture réussie : prévenir Windows pour que les nouveaux processus voient le changement.
     let broadcast = broadcast_environment_change();
@@ -499,7 +499,7 @@ pub async fn restore_registry_backup(app: tauri::AppHandle, backup_file: String)
     let var_changes: Vec<(&String, &Option<ScopeBackup>)> =
         b.touched_variables.iter().filter(|(n, old)| current.touched_variables.get(*n) != Some(*old)).collect();
     if do_system && !can_write(HKEY_LOCAL_MACHINE, SYSTEM_KEY) {
-        return Err(admin_error("Restaurer le PATH Système"));
+        return Err(admin_error(tr!("Restaurer le PATH Système", "Restore the System PATH")));
     }
     if !do_system && !do_user && var_changes.is_empty() {
         return Ok(false);

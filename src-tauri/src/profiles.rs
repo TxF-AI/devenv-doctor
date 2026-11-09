@@ -137,32 +137,32 @@ pub fn looks_secret(name: &str) -> bool {
 /// Refuse un profil mal formé ou démesuré avant de s'en servir.
 pub fn validate_profile(p: &EnvironmentProfile) -> Result<(), String> {
     if p.version != PROFILE_VERSION {
-        return Err(format!("Version de profil non prise en charge : {}", p.version));
+        return Err(tr!(format!("Version de profil non prise en charge : {}", p.version), format!("Unsupported profile version: {}", p.version)));
     }
     let name = p.name.trim();
     if name.is_empty() || name.chars().count() > 64 || name.chars().any(|c| c.is_control()) {
-        return Err("Nom de profil invalide (1 à 64 caractères, sans caractère de contrôle).".into());
+        return Err(tr!("Nom de profil invalide (1 à 64 caractères, sans caractère de contrôle).", "Invalid profile name (1 to 64 characters, no control characters).").into());
     }
     if p.description.chars().count() > 500 {
-        return Err("Description trop longue (500 caractères maximum).".into());
+        return Err(tr!("Description trop longue (500 caractères maximum).", "Description too long (500 characters maximum).").into());
     }
     for (label, list) in [("path_user", &p.path_user), ("path_system", &p.path_system)] {
         if list.len() > MAX_ENTRIES {
-            return Err(format!("{label} : trop d'entrées (maximum {MAX_ENTRIES})."));
+            return Err(tr!(format!("{label} : trop d'entrées (maximum {MAX_ENTRIES})."), format!("{label}: too many entries (maximum {MAX_ENTRIES}).")));
         }
         if let Some(bad) = list.iter().find(|e| !valid_entry(e)) {
-            return Err(format!("{label} : entrée invalide « {bad} » (vide, trop longue, « ; » ou NUL)."));
+            return Err(tr!(format!("{label} : entrée invalide « {bad} » (vide, trop longue, « ; » ou NUL)."), format!("{label}: invalid entry “{bad}” (empty, too long, “;” or NUL).")));
         }
     }
     if p.variables.len() > MAX_VARIABLES {
-        return Err(format!("Trop de variables (maximum {MAX_VARIABLES})."));
+        return Err(tr!(format!("Trop de variables (maximum {MAX_VARIABLES})."), format!("Too many variables (maximum {MAX_VARIABLES}).")));
     }
     for (k, v) in &p.variables {
         if !valid_var_name(k) {
-            return Err(format!("Nom de variable invalide : « {k} » (lettres, chiffres, « _ »)."));
+            return Err(tr!(format!("Nom de variable invalide : « {k} » (lettres, chiffres, « _ »)."), format!("Invalid variable name: “{k}” (letters, digits, “_”).")));
         }
         if v.len() > 8192 || v.contains('\0') {
-            return Err(format!("Valeur invalide pour {k} (trop longue ou caractère NUL)."));
+            return Err(tr!(format!("Valeur invalide pour {k} (trop longue ou caractère NUL)."), format!("Invalid value for {k} (too long or NUL character).")));
         }
     }
     Ok(())
@@ -170,10 +170,10 @@ pub fn validate_profile(p: &EnvironmentProfile) -> Result<(), String> {
 
 pub fn parse_profile(json: &str) -> Result<EnvironmentProfile, String> {
     if json.len() > 1_000_000 {
-        return Err("Fichier de profil trop volumineux (1 Mo maximum).".into());
+        return Err(tr!("Fichier de profil trop volumineux (1 Mo maximum).", "Profile file too large (1 MB maximum).").into());
     }
     let p: EnvironmentProfile =
-        serde_json::from_str(json).map_err(|e| format!("Profil illisible : {e}"))?;
+        serde_json::from_str(json).map_err(|e| tr!(format!("Profil illisible : {e}"), format!("Unreadable profile: {e}")))?;
     validate_profile(&p)?;
     Ok(p)
 }
@@ -195,13 +195,13 @@ pub fn builtin_presets() -> Vec<EnvironmentProfile> {
     vec![
         mk(
             "Minimal Clean",
-            "Retire doublons et orphelins sûrs du PATH Utilisateur, n'ajoute rien.",
+            tr!("Retire doublons et orphelins sûrs du PATH Utilisateur, n'ajoute rien.", "Removes duplicates and safe orphans from the User PATH, adds nothing."),
             &[],
             true,
         ),
         mk(
             "WebDev",
-            "Ajoute (si présents sur le disque et absents du PATH) Node.js, npm global, Git et VS Code.",
+            tr!("Ajoute (si présents sur le disque et absents du PATH) Node.js, npm global, Git et VS Code.", "Adds (if present on disk and missing from PATH) Node.js, global npm, Git and VS Code."),
             &[
                 r"%ProgramFiles%\nodejs",
                 r"%APPDATA%\npm",
@@ -212,7 +212,7 @@ pub fn builtin_presets() -> Vec<EnvironmentProfile> {
         ),
         mk(
             "GameDev",
-            "Ajoute (si présents sur le disque et absents du PATH) Git, CMake, .NET et les liens WinGet.",
+            tr!("Ajoute (si présents sur le disque et absents du PATH) Git, CMake, .NET et les liens WinGet.", "Adds (if present on disk and missing from PATH) Git, CMake, .NET and the WinGet links."),
             &[
                 r"%ProgramFiles%\Git\cmd",
                 r"%ProgramFiles%\CMake\bin",
@@ -264,7 +264,7 @@ pub fn compute_plan(
                         continue; // déjà dans le PATH (Utilisateur ou Système)
                     }
                     if !exists(expanded.trim().trim_matches('"')) {
-                        notes.push(format!("{c} : dossier introuvable, non ajouté"));
+                        notes.push(tr!(format!("{c} : dossier introuvable, non ajouté"), format!("{c}: folder not found, not added")));
                         continue;
                     }
                     have.insert(key);
@@ -285,7 +285,7 @@ pub fn compute_plan(
 
     let path_changed = touch_path && new_list != current;
     if path_changed && new_list.is_empty() {
-        return Err("Le PATH Utilisateur résultant serait vide : refusé.".into());
+        return Err(tr!("Le PATH Utilisateur résultant serait vide : refusé.", "The resulting User PATH would be empty: refused.").into());
     }
     let lower = |v: &[String]| v.iter().map(|s| s.to_lowercase()).collect::<HashSet<_>>();
     let (cur_set, new_set) = (lower(&current), lower(&new_list));
@@ -302,7 +302,7 @@ pub fn compute_plan(
         Some(match user_type {
             Some("REG_SZ") if !has_var => "REG_SZ",
             Some("REG_SZ") | Some("REG_EXPAND_SZ") | None => "REG_EXPAND_SZ",
-            Some(other) => return Err(format!("Type du PATH Utilisateur non pris en charge : {other}")),
+            Some(other) => return Err(tr!(format!("Type du PATH Utilisateur non pris en charge : {other}"), format!("Unsupported User PATH type: {other}"))),
         })
     } else {
         None
@@ -311,7 +311,7 @@ pub fn compute_plan(
     let mut variables = Vec::new();
     for (name, value) in &profile.variables {
         if is_protected_var(name) {
-            notes.push(format!("{name} : variable protégée, ignorée"));
+            notes.push(tr!(format!("{name} : variable protégée, ignorée"), format!("{name}: protected variable, ignored")));
             continue;
         }
         let existing = current_vars.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v);
@@ -412,7 +412,7 @@ fn real_plan(profile: &EnvironmentProfile) -> Result<ProfilePlan, String> {
     validate_profile(profile)?;
     let report = build_report();
     if let Some(e) = &report.user.error {
-        return Err(format!("Lecture du PATH Utilisateur impossible : {e}"));
+        return Err(tr!(format!("Lecture du PATH Utilisateur impossible : {e}"), format!("Cannot read the User PATH: {e}")));
     }
     let user = read_path_value(HKEY_CURRENT_USER, USER_KEY)?;
     let vars = read_user_vars()?;
@@ -451,9 +451,9 @@ fn profiles_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("Dossier de données introuvable : {e}"))?
+        .map_err(|e| tr!(format!("Dossier de données introuvable : {e}"), format!("Data folder not found: {e}")))?
         .join("profiles");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Création de {} impossible : {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| tr!(format!("Création de {} impossible : {e}", dir.display()), format!("Cannot create {}: {e}", dir.display())))?;
     Ok(dir)
 }
 
@@ -474,7 +474,7 @@ pub async fn export_profile(
     let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
     let dir = profiles_dir(&app)?;
     let file = dir.join(format!("{}.json", sanitize_file_name(&profile.name)));
-    std::fs::write(&file, &json).map_err(|e| format!("Écriture de {} impossible : {e}", file.display()))?;
+    std::fs::write(&file, &json).map_err(|e| tr!(format!("Écriture de {} impossible : {e}", file.display()), format!("Cannot write {}: {e}", file.display())))?;
     Ok(ExportResult {
         path: file.display().to_string(),
         json,
@@ -506,7 +506,7 @@ pub async fn apply_profile(app: tauri::AppHandle, profile: EnvironmentProfile) -
         return Ok(ApplyResult { changed: false, backup_file: None, variables_changed: 0, path_changed: false, broadcast: false });
     }
     if !can_write(HKEY_CURRENT_USER, USER_KEY) {
-        return Err("Écriture refusée sur HKCU\\Environment.".into());
+        return Err(tr!("Écriture refusée sur HKCU\\Environment.", "Write refused on HKCU\\Environment.").into());
     }
     let names: Vec<String> = plan.variables.iter().map(|v| v.name.clone()).collect();
     let backup = snapshot_with_vars(&format!("avant-profil:{}", plan.name), &names)?;
@@ -515,10 +515,10 @@ pub async fn apply_profile(app: tauri::AppHandle, profile: EnvironmentProfile) -
 
     if let (Some(path), Some(ty)) = (&plan.new_user_path, &plan.path_value_type) {
         write_path_value(HKEY_CURRENT_USER, USER_KEY, path, ty)
-            .map_err(|e| format!("{e} (sauvegarde : {file_name})"))?;
+            .map_err(|e| format!("{e} ({}: {file_name})", tr!("sauvegarde", "backup")))?;
     }
     for v in &plan.variables {
-        write_user_var(&v.name, &v.new, &v.value_type).map_err(|e| format!("{e} (sauvegarde : {file_name})"))?;
+        write_user_var(&v.name, &v.new, &v.value_type).map_err(|e| format!("{e} ({}: {file_name})", tr!("sauvegarde", "backup")))?;
     }
     Ok(ApplyResult {
         changed: true,
@@ -670,6 +670,122 @@ Write-Host ''
 Write-Host 'Terminé. Ouvre un nouveau terminal pour voir les changements.'
 "#;
 
+const PS_TEMPLATE_EN: &str = r#"<#
+.SYNOPSIS
+    Reconfigures the user environment (PATH and variables) on a fresh PC.
+
+.DESCRIPTION
+    Script generated by DevEnv Doctor on __DATE__ from the profile “__NAME__”.
+
+    - Only changes the USER environment: no administrator rights required,
+      the System PATH is never touched.
+    - Contains no secret: variables whose name suggests a token, a key or a
+      password were excluded during the export.
+    - Safe to run again: an entry that is already present is not added twice.
+    - %VARIABLES% are expanded on THIS PC at run time.
+
+.PARAMETER OnlyExisting
+    Only adds folders that already exist on this PC to the PATH.
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-env.ps1 -WhatIf
+    Shows what would be done, without changing anything.
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-env.ps1 -OnlyExisting
+#>
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [switch]$OnlyExisting
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# --- Profile data --------------------------------------------------------
+
+# User PATH entries, from highest to lowest priority.
+$PathEntries = @(
+__PATHS__
+)
+
+# User environment variables (name = value).
+$Variables = [ordered]@{
+__VARS__
+}
+
+# --- Tools -------------------------------------------------------------------
+
+# SetEnvironmentVariable always writes a REG_SZ value: Windows would never
+# expand a “%USERPROFILE%” left as is, so we expand it here.
+# (Entries already in the PATH are read back already expanded by .NET.)
+function Expand-Value([string]$Value) {
+    return [Environment]::ExpandEnvironmentVariables($Value)
+}
+
+function Get-PathKey([string]$Path) {
+    return $Path.Trim().TrimEnd('\').ToLowerInvariant()
+}
+
+# --- Backup of the current state (except with -WhatIf) ----------------------------
+if (-not $WhatIfPreference) {
+    $backupFile = Join-Path $env:TEMP ('setup-env-backup-{0:yyyyMMdd-HHmmss}.json' -f (Get-Date))
+    $saved = [ordered]@{ Path = [Environment]::GetEnvironmentVariable('Path', 'User') }
+    foreach ($name in $Variables.Keys) {
+        $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'User')
+    }
+    $saved | ConvertTo-Json | Set-Content -LiteralPath $backupFile -Encoding UTF8
+    Write-Host "Backup of the current state: $backupFile"
+}
+
+# --- User PATH -----------------------------------------------------------
+$current = [Environment]::GetEnvironmentVariable('Path', 'User')
+$list = New-Object System.Collections.Generic.List[string]
+if ($current) {
+    foreach ($part in $current.Split(';')) {
+        if ($part.Trim()) { $list.Add($part.Trim()) }
+    }
+}
+$known = @{}
+foreach ($entry in $list) { $known[(Get-PathKey (Expand-Value $entry))] = $true }
+
+$added = 0
+foreach ($entry in $PathEntries) {
+    $expanded = Expand-Value $entry
+    if ($known.ContainsKey((Get-PathKey $expanded))) {
+        Write-Host "= already in PATH: $expanded"
+        continue
+    }
+    if ($OnlyExisting -and -not (Test-Path -LiteralPath $expanded)) {
+        Write-Host "~ skipped (folder missing): $expanded"
+        continue
+    }
+    $list.Add($expanded)
+    $known[(Get-PathKey $expanded)] = $true
+    $added++
+    Write-Host "+ PATH : $expanded"
+}
+if ($added -gt 0 -and $PSCmdlet.ShouldProcess('user PATH', "add $added entrie(s)")) {
+    [Environment]::SetEnvironmentVariable('Path', ($list -join ';'), 'User')
+}
+
+# --- Variables ------------------------------------------------------------------
+foreach ($name in $Variables.Keys) {
+    $value = Expand-Value ([string]$Variables[$name])
+    if ([Environment]::GetEnvironmentVariable($name, 'User') -eq $value) {
+        Write-Host "= already set: $name"
+        continue
+    }
+    if ($PSCmdlet.ShouldProcess("variable $name", 'set')) {
+        [Environment]::SetEnvironmentVariable($name, $value, 'User')
+        Write-Host "+ $name = $value"
+    }
+}
+
+Write-Host ''
+Write-Host 'Done. Open a new terminal to see the changes.'
+"#;
+
 /// Script `setup-env.ps1` (texte LF ; l'écriture fichier ajoute BOM et CRLF).
 pub fn build_powershell(p: &EnvironmentProfile, generated: &str) -> String {
     let paths = p.path_user.iter().map(|e| format!("    {}", ps_quote(e))).collect::<Vec<_>>().join(",\n");
@@ -679,7 +795,7 @@ pub fn build_powershell(p: &EnvironmentProfile, generated: &str) -> String {
         .map(|(k, v)| format!("    {} = {}", ps_quote(k), ps_quote(v)))
         .collect::<Vec<_>>()
         .join("\n");
-    PS_TEMPLATE
+    tr!(PS_TEMPLATE, PS_TEMPLATE_EN)
         .replace("__DATE__", &comment_safe(generated))
         .replace("__NAME__", &comment_safe(&p.name))
         .replace("__PATHS__", &paths)
@@ -709,7 +825,7 @@ pub async fn export_powershell(app: tauri::AppHandle, name: String) -> Result<Sc
     let (profile, skipped_secrets) = collect_export(&name, "")?;
     let script = build_powershell(&profile, &chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
     let file = profiles_dir(&app)?.join("setup-env.ps1");
-    std::fs::write(&file, ps_file_bytes(&script)).map_err(|e| format!("Écriture de {} impossible : {e}", file.display()))?;
+    std::fs::write(&file, ps_file_bytes(&script)).map_err(|e| tr!(format!("Écriture de {} impossible : {e}", file.display()), format!("Cannot write {}: {e}", file.display())))?;
     Ok(ScriptExport {
         path: file.display().to_string(),
         script,
@@ -756,6 +872,8 @@ mod tests {
 
     #[test]
     fn merge_ajoute_seulement_les_dossiers_existants_et_absents() {
+        let _l = crate::i18n::LANG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_english(false);
         let p = profile(ApplyMode::Merge, &[r"%ProgramFiles%\node", r"%ProgramFiles%\absent", r"C:\Deja", r"C:\DuSysteme"], false);
         let ex = |x: &str| x != r"C:\PF\absent";
         let r = plan(&p, r"C:\Deja", Some("REG_EXPAND_SZ"), &sys(&[r"c:\dusysteme\"]), &BTreeMap::new(), ex).unwrap();
@@ -803,6 +921,8 @@ mod tests {
 
     #[test]
     fn variables_protegees_ignorees_inchangees_sautees_et_type_choisi() {
+        let _l = crate::i18n::LANG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_english(false);
         let mut p = profile(ApplyMode::Merge, &[], false);
         p.variables = [
             ("Path", "x"), ("comspec", "evil.exe"), ("EDITOR", "code"), ("SAME", "1"),
@@ -921,6 +1041,8 @@ mod tests {
 
     #[test]
     fn script_powershell_genere() {
+        let _l = crate::i18n::LANG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_english(false);
         let mut p = profile(ApplyMode::Replace, &[r"%USERPROFILE%\.cargo\bin", r"D:\O'Brien"], false);
         p.name = "Mon <#PC#> \n evil".into();
         p.variables.insert("EDITOR".into(), "code 'x'".into());
@@ -934,6 +1056,17 @@ mod tests {
         assert!(header.contains("Mon PC  evil") && !header.contains("<#PC#>"));
         assert_eq!(s.matches("#>").count(), 1);
         assert!(!s.contains("__"));
+    }
+
+    #[test]
+    fn script_powershell_en_anglais() {
+        let _l = crate::i18n::LANG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_english(true);
+        let p = profile(ApplyMode::Replace, &[r"C:\bin"], false);
+        let s = build_powershell(&p, "2026-11-09 19:30");
+        crate::i18n::set_english(false);
+        assert!(s.contains("on 2026-11-09 19:30") && s.contains("= already in PATH") && !s.contains("déjà"));
+        assert!(s.contains("SupportsShouldProcess") && !s.contains("__"));
     }
 
     #[test]

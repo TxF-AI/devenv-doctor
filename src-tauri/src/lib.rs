@@ -1,3 +1,5 @@
+#[macro_use]
+mod i18n;
 mod actions;
 mod optimize;
 mod profiles;
@@ -178,6 +180,12 @@ async fn get_registry_paths() -> RegistryPathReport {
     build_report()
 }
 
+/// Choisit la langue des messages du backend ("fr" ou "en").
+#[tauri::command]
+fn set_language(lang: String) {
+    i18n::set_english(lang.eq_ignore_ascii_case("en"));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -201,7 +209,8 @@ pub fn run() {
             optimize::preview_compress,
             optimize::compress_path,
             optimize::move_path_entry,
-            optimize::analyze_conflicts
+            optimize::analyze_conflicts,
+            set_language
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

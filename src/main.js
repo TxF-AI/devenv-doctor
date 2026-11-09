@@ -1,10 +1,11 @@
 import "./styles.css";
 import { icon, hydrateIcons } from "./icons.js";
+import { t, setLang, getLang, applyStatic } from "./i18n.js";
 
 const { invoke } = window.__TAURI__.core;
 
-const SCOPE_NAMES = { User: "Utilisateur", System: "Système", All: "Tout" };
 const HIVE = { User: "HKCU\\Environment", System: "HKLM\\…\\Session Manager\\Environment" };
+const DEFAULT_PROFILE_NAMES = ["Mon environnement", "My environment"];
 
 let report = null;
 let isAdmin = false;
@@ -12,6 +13,7 @@ let plans = { orphans: null, duplicates: null, compress: null };
 let lengths = null;
 let conflicts = new Map(); // "Scope:index" → { total, names[] }
 let lastMoved = null; // { scope, path } : ligne à faire clignoter après un déplacement
+let sync = { kind: "idle", time: null }; // pied de page : état gardé en données pour être retraduit
 const filters = { q: "", scope: "all", state: "all" };
 
 const $ = (sel) => document.querySelector(sel);
@@ -25,7 +27,16 @@ function el(tagName, cls, text) {
 }
 const isAdminError = (err) => String(err).startsWith("AdminRequired");
 const scopeSel = () => $("#scope-select").value;
-const fmtTime = (d = new Date()) => d.toLocaleTimeString("fr-FR");
+const scopeName = (s) => t(`scope_${s}`);
+const fmtTime = (d = new Date()) => d.toLocaleTimeString(t("locale"));
+const fmtDate = (d) => d.toLocaleString(t("locale"));
+/** Raison d'une sauvegarde : identifiant stable stocké dans le fichier, traduit à l'affichage. */
+function reasonLabel(r) {
+  if (r.startsWith("avant-profil:")) return t("reason_profile", { name: r.slice("avant-profil:".length) });
+  const k = `reason_${r}`;
+  const v = t(k);
+  return v === k ? r : v;
+}
 
 // ─────────────── Données & filtres ───────────────
 
@@ -60,18 +71,18 @@ function badge(text, cls, iconName) {
 
 function renderStats(all) {
   const c = [
-    ["Total", all.length, "all", "var(--info)"],
-    ["Valides", all.filter((e) => e.exists).length, "ok", "var(--ok)"],
-    ["Orphelins", all.filter((e) => !e.exists).length, "orphan", "var(--bad)"],
-    ["Doublons", all.filter((e) => e.is_duplicate).length, "dup", "var(--warn)"],
-    ["Conflits", all.filter((e) => conflictOf(e)).length, "conflict", "var(--warn)"],
+    [t("st_total"), all.length, "all", "var(--info)"],
+    [t("st_valid"), all.filter((e) => e.exists).length, "ok", "var(--ok)"],
+    [t("st_orphans"), all.filter((e) => !e.exists).length, "orphan", "var(--bad)"],
+    [t("st_dups"), all.filter((e) => e.is_duplicate).length, "dup", "var(--warn)"],
+    [t("st_conflicts"), all.filter((e) => conflictOf(e)).length, "conflict", "var(--warn)"],
   ];
   $("#stats").replaceChildren(
     ...c.map(([k, v, state, color]) => {
       const b = el("button", "stat");
       b.style.setProperty("--c", color);
       b.setAttribute("aria-pressed", String(filters.state === state));
-      b.title = `Filtrer : ${k.toLowerCase()}`;
+      b.title = t("st_filter_title", { k });
       b.append(el("span", "k", k), el("span", "v", String(v)));
       b.addEventListener("click", () => setFilter("state", filters.state === state ? "all" : state));
       return b;
@@ -83,13 +94,13 @@ function row(e) {
   const tr = el("tr", (e.exists ? "" : "orphan ") + (e.is_duplicate ? "dup" : ""));
   tr.append(el("td", "ind"), el("td", "n", String(e.n)));
   const st = el("td", "st");
-  st.append(e.exists ? badge("Valide", "ok") : badge("Orphelin", "bad", "circle-alert"));
-  if (e.is_duplicate) st.append(badge("Doublon", "warn", "copy"));
+  st.append(e.exists ? badge(t("b_valid"), "ok") : badge(t("b_orphan"), "bad", "circle-alert"));
+  if (e.is_duplicate) st.append(badge(t("b_dup"), "warn", "copy"));
   const bs = el("div", "bs");
   while (st.firstChild) bs.append(st.firstChild);
   const cf = conflictOf(e);
   if (cf) {
-    const b = badge("Conflit de version", "conf", "arrow-left-right");
+    const b = badge(t("b_conflict"), "conf", "arrow-left-right");
     b.title = conflictTitle(cf);
     bs.append(b);
   }
@@ -112,12 +123,14 @@ function row(e) {
 
 /** « node.exe (masqué par #14) · python.exe (gagne) » : 4 noms au plus, le reste en infobulle. */
 function conflictLine(cf) {
-  const part = (n) => (n.wins ? `${n.name} (gagne)` : `${n.name} (masqué par #${numberOf(n.other_scope, n.other_index)})`);
+  const part = (n) => (n.wins ? t("cf_wins", { name: n.name }) : t("cf_masked", { name: n.name, n: numberOf(n.other_scope, n.other_index) }));
   const shown = cf.names.slice(0, 4).map(part).join(" · ");
   return cf.total > 4 ? `${shown} · +${cf.total - 4}` : shown;
 }
 const conflictTitle = (cf) =>
-  cf.names.map((n) => (n.wins ? `${n.name} : c'est cette entrée qui est lancée` : `${n.name} : masqué par l'entrée #${numberOf(n.other_scope, n.other_index)}`)).join("\n");
+  cf.names
+    .map((n) => (n.wins ? t("cf_title_wins", { name: n.name }) : t("cf_title_masked", { name: n.name, n: numberOf(n.other_scope, n.other_index) })))
+    .join("\n");
 
 function moveButtons(e) {
   const box = el("span", "mv");
@@ -125,15 +138,15 @@ function moveButtons(e) {
   const mk = (dir, ic, label, disabled) => {
     const b = el("button", "");
     b.append(icon(ic, 13));
-    b.title = needAdmin ? "Droits Administrateur requis (PATH Système)" : label;
+    b.title = needAdmin ? t("need_admin_title") : label;
     b.setAttribute("aria-label", `${label} : ${e.raw_path}`);
     b.disabled = disabled || needAdmin;
     b.addEventListener("click", () => onMove(e, dir));
     return b;
   };
   box.append(
-    mk("up", "chevron-up", "Monter (plus prioritaire)", e.idx === 0),
-    mk("down", "chevron-down", "Descendre (moins prioritaire)", e.idx === e.scopeLen - 1),
+    mk("up", "chevron-up", t("mv_up"), e.idx === 0),
+    mk("down", "chevron-down", t("mv_down"), e.idx === e.scopeLen - 1),
   );
   return box;
 }
@@ -143,7 +156,7 @@ function renderTable() {
   const shown = all.filter(matches);
   $("#rows").replaceChildren(...shown.map(row));
   $("#empty").classList.toggle("hidden", shown.length > 0);
-  $("#count-txt").textContent = `${shown.length}/${all.length} entrées affichées`;
+  $("#count-txt").textContent = t("count_txt", { shown: shown.length, total: all.length });
   renderStats(all);
   renderLens();
   $("#q-clear").classList.toggle("hidden", filters.q === "");
@@ -163,7 +176,7 @@ const METER_MAX = 8192;
 const METER_TICKS = [1024, 2048]; // 8192 = fin de la jauge
 const RISK_COLOR = { ok: "var(--ok)", near: "var(--warn)", medium: "var(--warn)", high: "var(--bad)", critical: "var(--bad)" };
 const RISK_CLASS = { ok: "", near: "warn", medium: "warn", high: "bad", critical: "bad" };
-const fmtNum = (n) => n.toLocaleString("fr-FR");
+const fmtNum = (n) => n.toLocaleString(t("locale"));
 
 function renderLens() {
   const box = $("#lens");
@@ -172,24 +185,24 @@ function renderLens() {
     return;
   }
   const cells = [
-    ["HKCU · valeur brute", lengths.user, "Longueur de la valeur Path stockée dans HKCU."],
-    ["HKLM · valeur brute", lengths.system, "Longueur de la valeur Path stockée dans HKLM."],
-    ["Effectif · HKLM;HKCU", lengths.combined, "PATH vu par un programme : Système + « ; » + Utilisateur, variables développées."],
+    [t("lens_hkcu"), lengths.user, t("lens_hkcu_tip")],
+    [t("lens_hklm"), lengths.system, t("lens_hklm_tip")],
+    [t("lens_eff"), lengths.combined, t("lens_eff_tip")],
   ];
   box.replaceChildren(
     ...cells.map(([label, info, tip]) => {
       const c = el("div", "lens-cell");
       c.title = tip;
       const top = el("div", "lens-top");
-      top.append(el("span", "k", label), el("span", "v", `${fmtNum(info.length)} car.`));
+      top.append(el("span", "k", label), el("span", "v", `${fmtNum(info.length)} ${t("chars_unit")}`));
       const meter = el("div", "meter");
       const fill = el("i");
       fill.style.width = `${Math.min(100, (info.length / METER_MAX) * 100)}%`;
       fill.style.setProperty("--c", RISK_COLOR[info.risk.level]);
       meter.append(fill);
-      for (const t of METER_TICKS) {
+      for (const tk of METER_TICKS) {
         const tick = el("b");
-        tick.style.left = `${(t / METER_MAX) * 100}%`;
+        tick.style.left = `${(tk / METER_MAX) * 100}%`;
         meter.append(tick);
       }
       c.append(top, meter, el("div", `lens-msg ${RISK_CLASS[info.risk.level]}`, info.risk.message));
@@ -221,8 +234,8 @@ function renderAdmin() {
   const p = $("#admin-pill");
   p.replaceChildren(icon(isAdmin ? "lock-open" : "lock", 12));
   p.className = `pill ${isAdmin ? "ok" : "warn"}`;
-  p.append(isAdmin ? "Administrateur : PATH Système modifiable" : "Droits Administrateur requis pour modifier le PATH Système");
-  p.title = isAdmin ? "" : "Le PATH Utilisateur reste modifiable (portée « Utilisateur »).";
+  p.append(isAdmin ? t("admin_ok") : t("admin_need"));
+  p.title = isAdmin ? "" : t("admin_need_title");
 }
 
 function renderButtons() {
@@ -239,31 +252,39 @@ function renderButtons() {
 // ─────────────── Toasts & LED WM_SETTINGCHANGE ───────────────
 
 function toast(msg, kind = "ok") {
-  const t = el("div", `toast ${kind}`);
-  t.append(icon(kind === "error" ? "circle-alert" : kind === "warn" ? "triangle-alert" : "check", 14), el("span", "", msg));
+  const tt = el("div", `toast ${kind}`);
+  tt.append(icon(kind === "error" ? "circle-alert" : kind === "warn" ? "triangle-alert" : "check", 14), el("span", "", msg));
   const x = el("button", "x");
-  x.setAttribute("aria-label", "Fermer");
+  x.setAttribute("aria-label", t("close"));
   x.append(icon("x", 12));
-  const close = () => t.remove();
+  const close = () => tt.remove();
   x.addEventListener("click", close);
-  t.append(x);
+  tt.append(x);
   const box = $("#toasts");
-  box.append(t);
+  box.append(tt);
   while (box.children.length > 3) box.firstChild.remove();
   if (kind !== "error") setTimeout(close, kind === "warn" ? 12000 : 7000);
 }
 
+function renderSync() {
+  const led = $("#led");
+  if (sync.kind === "ok") {
+    led.className = "led ok";
+    $("#sync-txt").textContent = t("sync_ok", { time: fmtTime(sync.time) });
+  } else if (sync.kind === "warn") {
+    led.className = "led warn";
+    $("#sync-txt").textContent = t("sync_expired", { time: fmtTime(sync.time) });
+  } else {
+    led.className = "led idle";
+    $("#sync-txt").textContent = t("sync_idle");
+  }
+}
+
 /** LED du pied de page + phrase à ajouter au message de l'action. */
 function notifySync(broadcast) {
-  const led = $("#led");
-  if (broadcast) {
-    led.className = "led ok";
-    $("#sync-txt").textContent = `WM_SETTINGCHANGE · diffusé à ${fmtTime()} · variables synchronisées`;
-    return " Variables Windows synchronisées en temps réel.";
-  }
-  led.className = "led warn";
-  $("#sync-txt").textContent = `WM_SETTINGCHANGE · diffusion expirée à ${fmtTime()}`;
-  return " Registre modifié, mais la diffusion à Windows n'a pas abouti : relance tes terminaux pour voir le changement.";
+  sync = { kind: broadcast ? "ok" : "warn", time: new Date() };
+  renderSync();
+  return t(broadcast ? "sync_msg_ok" : "sync_msg_warn");
 }
 
 // ─────────────── Modale « diff Git » ───────────────
@@ -278,12 +299,12 @@ function entryDiff(entries, isDeleted, context = 1) {
   let hidden = 0;
   entries.forEach((e, i) => {
     if (visible[i]) {
-      if (hidden) out.push({ t: "gap", text: `… ${hidden} entrée(s) inchangée(s)` });
+      if (hidden) out.push({ t: "gap", text: t("diff_gap", { n: hidden }) });
       hidden = 0;
       out.push({ t: isDeleted(i) ? "del" : "ctx", text: e.raw_path });
     } else hidden++;
   });
-  if (hidden) out.push({ t: "gap", text: `… ${hidden} entrée(s) inchangée(s)` });
+  if (hidden) out.push({ t: "gap", text: t("diff_gap", { n: hidden }) });
   return out;
 }
 
@@ -346,7 +367,7 @@ async function refreshPlans() {
     plans = { orphans, duplicates, compress };
   } catch (err) {
     plans = { orphans: null, duplicates: null, compress: null };
-    toast(`Aperçu impossible : ${err}`, "error");
+    toast(t("preview_failed", { err }), "error");
   }
   renderButtons();
 }
@@ -354,24 +375,24 @@ async function refreshPlans() {
 async function onBackup() {
   try {
     const file = await invoke("create_registry_backup");
-    toast(`Sauvegarde créée : ${file}`);
+    toast(t("backup_created", { file }));
     await refreshBackups();
   } catch (err) {
-    toast(`Sauvegarde impossible : ${err}`, "error");
+    toast(t("backup_failed", { err }), "error");
   }
 }
 
 function cleanupDiff(plan) {
   const lines = [];
   for (const scope of ["System", "User"]) {
-    const targets = plan.targets.filter((t) => t.scope === scope);
+    const targets = plan.targets.filter((x) => x.scope === scope);
     if (!targets.length) continue;
-    const idx = new Set(targets.map((t) => t.index));
+    const idx = new Set(targets.map((x) => x.index));
     const entries = report[scope.toLowerCase()].entries;
     lines.push({ t: "hunk", text: `@@ ${HIVE[scope]} · Path @@` });
     lines.push(...entryDiff(entries, (i) => idx.has(i)));
     // Raison de chaque suppression, en commentaire sous le diff du scope.
-    for (const t of targets) lines.push({ t: "note", text: `${t.raw_path} : ${t.reason}` });
+    for (const x of targets) lines.push({ t: "note", text: `${x.raw_path} : ${x.reason}` });
   }
   return lines;
 }
@@ -382,28 +403,24 @@ async function onCleanup(kind) {
   const scope = scopeSel();
   const isOrphans = kind === "orphans";
   const blocked = plan.requires_admin && !plan.is_admin;
-  const skipped = plan.skipped_unsafe
-    ? ` ${plan.skipped_unsafe} entrée(s) introuvable(s) épargnée(s) par prudence (variable non résolue ou chemin réseau).`
-    : "";
+  const skipped = plan.skipped_unsafe ? t("skipped_unsafe", { n: plan.skipped_unsafe }) : "";
   const ok = await confirmModal({
-    title: isOrphans ? "Supprimer les entrées orphelines" : "Supprimer les doublons",
-    subtitle: `${plan.targets.length} entrée(s) · portée : ${SCOPE_NAMES[scope]}`,
+    title: t(isOrphans ? "del_title_orphans" : "del_title_dups"),
+    subtitle: t("del_sub", { n: plan.targets.length, scope: scopeName(scope) }),
     diff: cleanupDiff(plan),
-    warning: blocked
-      ? "Droits Administrateur requis : des entrées du PATH Système sont concernées. Relance l'application en administrateur, ou choisis la portée « Utilisateur »."
-      : "",
-    note: `Sauvegarde automatique avant écriture.${skipped}`,
-    confirmLabel: blocked ? "Admin requis" : "Supprimer",
+    warning: blocked ? t("admin_block") : "",
+    note: t("auto_backup_note", { skipped }),
+    confirmLabel: blocked ? t("admin_required_btn") : t("delete_btn"),
     canConfirm: !blocked,
   });
   if (!ok) return;
   try {
     const res = await invoke(isOrphans ? "remove_orphans" : "deduplicate_paths", { scope });
-    const done = `${res.removed.length} entrée(s) supprimée(s). Sauvegarde : ${res.backup_file ?? "aucune (rien à faire)"}.`;
+    const done = t("removed_done", { n: res.removed.length, backup: res.backup_file ?? t("no_backup_nothing") });
     if (res.removed.length === 0) toast(done);
     else toast(done + notifySync(res.broadcast), res.broadcast ? "ok" : "warn");
   } catch (err) {
-    toast(isAdminError(err) ? `${err}` : `Échec : ${err}`, "error");
+    toast(isAdminError(err) ? `${err}` : t("failed", { err }), "error");
   }
   await refreshAll();
 }
@@ -416,7 +433,7 @@ function compressDiff(plan) {
     lines.push({ t: "hunk", text: `@@ ${HIVE[scope]} · Path @@` });
     for (const c of ch) {
       lines.push({ t: "del", text: c.old });
-      lines.push({ t: "add", text: c.new, sub: `−${c.old.length - c.new.length} car.` });
+      lines.push({ t: "add", text: c.new, sub: `−${c.old.length - c.new.length} ${t("chars_unit")}` });
     }
   }
   return lines;
@@ -428,14 +445,12 @@ async function onCompress() {
   const scope = scopeSel();
   const blocked = plan.requires_admin && !plan.is_admin;
   const ok = await confirmModal({
-    title: "Compresser le PATH",
-    subtitle: `${plan.changes.length} entrée(s) · −${plan.saved_chars} caractère(s) · portée : ${SCOPE_NAMES[scope]}`,
+    title: t("compress_title"),
+    subtitle: t("compress_sub", { n: plan.changes.length, saved: plan.saved_chars, scope: scopeName(scope) }),
     diff: compressDiff(plan),
-    warning: blocked
-      ? "Droits Administrateur requis : des entrées du PATH Système sont concernées. Relance l'application en administrateur, ou choisis la portée « Utilisateur »."
-      : "",
-    note: "Équivalent pour Windows (variables développées au lancement). Jamais de variable propre à l'utilisateur dans le PATH Système. Sauvegarde automatique.",
-    confirmLabel: blocked ? "Admin requis" : "Compresser",
+    warning: blocked ? t("admin_block") : "",
+    note: t("compress_note"),
+    confirmLabel: blocked ? t("admin_required_btn") : t("compress_btn"),
     canConfirm: !blocked,
     iconName: "shrink",
     tone: "primary",
@@ -443,9 +458,12 @@ async function onCompress() {
   if (!ok) return;
   try {
     const res = await invoke("compress_path", { scope });
-    toast(`PATH compressé : −${res.saved_chars} caractère(s) sur ${res.changes.length} entrée(s). Sauvegarde : ${res.backup_file ?? "aucune"}.` + notifySync(res.broadcast), res.broadcast ? "ok" : "warn");
+    toast(
+      t("compress_done", { saved: res.saved_chars, n: res.changes.length, backup: res.backup_file ?? t("no_backup") }) + notifySync(res.broadcast),
+      res.broadcast ? "ok" : "warn",
+    );
   } catch (err) {
-    toast(isAdminError(err) ? `${err}` : `Échec : ${err}`, "error");
+    toast(isAdminError(err) ? `${err}` : t("failed", { err }), "error");
   }
   await refreshAll();
 }
@@ -456,9 +474,9 @@ async function onMove(e, direction) {
     const res = await invoke("move_path_entry", { scope: e.scope, index: e.idx, direction, expectedPath: e.raw_path });
     lastMoved = { scope: e.scope, path: e.raw_path };
     notifySync(res.broadcast);
-    if (!res.broadcast) toast("Entrée déplacée, mais la diffusion à Windows a expiré : relance tes terminaux.", "warn");
+    if (!res.broadcast) toast(t("move_warn"), "warn");
   } catch (err) {
-    toast(isAdminError(err) ? `${err}` : `Déplacement impossible : ${err}`, "error");
+    toast(isAdminError(err) ? `${err}` : t("move_failed", { err }), "error");
   }
   await refreshAll();
 }
@@ -470,7 +488,7 @@ async function refreshBackups() {
   try {
     const list = await invoke("list_backups");
     if (list.length === 0) {
-      ul.replaceChildren(el("li", "item", "Aucune sauvegarde pour l'instant."));
+      ul.replaceChildren(el("li", "item", t("no_backups")));
       return;
     }
     ul.replaceChildren(
@@ -479,18 +497,18 @@ async function refreshBackups() {
         const when = new Date(b.created_at);
         const txt = el("div", "");
         txt.append(
-          el("div", "t", isNaN(when) ? b.file_name : when.toLocaleString("fr-FR")),
-          el("div", "d", `${b.reason} · HKCU ${b.user_entries} · HKLM ${b.system_entries}`),
+          el("div", "t", isNaN(when) ? b.file_name : fmtDate(when)),
+          el("div", "d", `${reasonLabel(b.reason)} · HKCU ${b.user_entries} · HKLM ${b.system_entries}`),
         );
         const btn = el("button", "btn sm info");
-        btn.append(icon("rotate-ccw", 12), "Restaurer");
+        btn.append(icon("rotate-ccw", 12), t("restore_btn"));
         btn.addEventListener("click", () => onRestore(b));
         li.append(txt, btn);
         return li;
       }),
     );
   } catch (err) {
-    ul.replaceChildren(el("li", "item", `Liste des sauvegardes impossible : ${err}`));
+    ul.replaceChildren(el("li", "item", t("backups_failed", { err })));
   }
 }
 
@@ -506,15 +524,15 @@ function restoreDiff(p) {
     d.current.filter((x) => !bak.has(x.toLowerCase())).forEach((x) => lines.push({ t: "del", text: x }));
     d.backup.filter((x) => !cur.has(x.toLowerCase())).forEach((x) => lines.push({ t: "add", text: x }));
     const same = d.backup.filter((x) => cur.has(x.toLowerCase())).length;
-    if (same) lines.push({ t: "gap", text: `… ${same} entrée(s) inchangée(s)` });
-    if (lines.length === before + (same ? 1 : 0)) lines.push({ t: "note", text: "Mêmes entrées : seuls l'ordre ou le formatage changent." });
+    if (same) lines.push({ t: "gap", text: t("diff_gap", { n: same }) });
+    if (lines.length === before + (same ? 1 : 0)) lines.push({ t: "note", text: t("restore_same_order") });
   }
   if (p.variables.length) {
     lines.push({ t: "hunk", text: "@@ HKCU\\Environment · variables @@" });
     for (const v of p.variables) {
       if (v.current !== null) lines.push({ t: "del", text: `${v.name}=${v.current}` });
       if (v.backup !== null) lines.push({ t: "add", text: `${v.name}=${v.backup}` });
-      else lines.push({ t: "note", text: `${v.name} sera supprimée (elle n'existait pas à l'époque)` });
+      else lines.push({ t: "note", text: t("restore_var_deleted", { name: v.name }) });
     }
   }
   return lines;
@@ -525,23 +543,23 @@ async function onRestore(b) {
   try {
     p = await invoke("preview_restore", { backupFile: b.file_name });
   } catch (err) {
-    toast(`Aperçu impossible : ${err}`, "error");
+    toast(t("preview_failed", { err }), "error");
     return;
   }
   const diff = restoreDiff(p);
   if (diff.length === 0) {
-    toast("Cette sauvegarde correspond déjà à l'état actuel : rien à restaurer.");
+    toast(t("restore_nothing"));
     return;
   }
   const needsAdmin = !!p.system && !isAdmin;
   const when = new Date(p.created_at);
   const ok = await confirmModal({
-    title: "Restaurer cette sauvegarde",
-    subtitle: `État du ${isNaN(when) ? b.file_name : when.toLocaleString("fr-FR")} · ${p.reason}`,
+    title: t("restore_title"),
+    subtitle: t("restore_sub", { when: isNaN(when) ? b.file_name : fmtDate(when), reason: reasonLabel(p.reason) }),
     diff,
-    warning: needsAdmin ? "Droits Administrateur requis : le PATH Système a changé depuis cette sauvegarde." : "",
-    note: "L'état actuel est sauvegardé avant la restauration (annulable).",
-    confirmLabel: needsAdmin ? "Admin requis" : "Restaurer",
+    warning: needsAdmin ? t("restore_admin_warn") : "",
+    note: t("restore_note"),
+    confirmLabel: needsAdmin ? t("admin_required_btn") : t("restore_btn"),
     canConfirm: !needsAdmin,
     iconName: "rotate-ccw",
     tone: "primary",
@@ -549,9 +567,9 @@ async function onRestore(b) {
   if (!ok) return;
   try {
     const synced = await invoke("restore_registry_backup", { backupFile: b.file_name });
-    toast("Sauvegarde restaurée." + notifySync(synced), synced ? "ok" : "warn");
+    toast(t("restore_done") + notifySync(synced), synced ? "ok" : "warn");
   } catch (err) {
-    toast(`Restauration impossible : ${err}`, "error");
+    toast(t("restore_failed", { err }), "error");
   }
   await refreshAll();
 }
@@ -567,15 +585,31 @@ async function refreshPresets() {
         const li = el("li", "item");
         const txt = el("div", "");
         txt.append(el("div", "t", p.name), el("div", "d", p.description));
-        const btn = el("button", "btn sm primary", "Aperçu & appliquer");
+        const btn = el("button", "btn sm primary", t("preset_apply_btn"));
         btn.addEventListener("click", () => onProfile(p));
         li.append(txt, btn);
         return li;
       }),
     );
   } catch (err) {
-    ul.replaceChildren(el("li", "item", `Presets indisponibles : ${err}`));
+    ul.replaceChildren(el("li", "item", t("presets_failed", { err })));
   }
+}
+
+/** Bouton « Copier » : bascule en « Copié » ; le texte copié vient du backend. */
+function copyButton(label, text) {
+  const copy = el("button", "btn sm");
+  copy.style.marginTop = "8px";
+  copy.append(icon("copy", 12), label);
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      copy.replaceChildren(icon("check", 12), t("copied"));
+    } catch {
+      copy.textContent = t("copy_denied");
+    }
+  });
+  return copy;
 }
 
 async function onExport() {
@@ -583,26 +617,15 @@ async function onExport() {
   try {
     const r = await invoke("export_profile", { name: $("#profile-name").value, description: $("#profile-desc").value });
     box.replaceChildren(
-      el("div", "okc", `Profil exporté : ${r.path}`),
-      el("div", "", `${r.path_user_count} entrée(s) PATH Utilisateur · ${r.path_system_count} PATH Système (informatif) · ${r.variable_count} variable(s)`),
+      el("div", "okc", t("export_done", { path: r.path })),
+      el("div", "", t("export_counts", { u: r.path_user_count, s: r.path_system_count, v: r.variable_count })),
     );
-    if (r.skipped_secrets.length) box.append(el("div", "wc", `Exclues (nom évoquant un secret) : ${r.skipped_secrets.join(", ")}`));
-    const copy = el("button", "btn sm");
-    copy.style.marginTop = "8px";
-    copy.append(icon("copy", 12), "Copier le JSON");
-    copy.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(r.json);
-        copy.replaceChildren(icon("check", 12), "Copié");
-      } catch {
-        copy.textContent = "Copie refusée : ouvre le fichier ci-dessus";
-      }
-    });
-    box.append(copy);
+    if (r.skipped_secrets.length) box.append(el("div", "wc", t("skipped_secrets", { list: r.skipped_secrets.join(", ") })));
+    box.append(copyButton(t("copy_json"), r.json));
     box.classList.remove("hidden");
-    toast("Profil exporté, sans secret ni nom d'utilisateur : prêt pour un dépôt dotfiles.");
+    toast(t("export_toast"));
   } catch (err) {
-    toast(`Export impossible : ${err}`, "error");
+    toast(t("export_failed", { err }), "error");
   }
 }
 
@@ -612,7 +635,7 @@ async function onImportFile(file) {
     const profile = await invoke("import_profile", { json: await file.text() });
     await onProfile(profile);
   } catch (err) {
-    toast(`Import impossible : ${err}`, "error");
+    toast(t("import_failed", { err }), "error");
   } finally {
     $("#file-import").value = ""; // permet de re-choisir le même fichier
   }
@@ -623,27 +646,16 @@ async function onExportScript() {
   try {
     const r = await invoke("export_powershell", { name: $("#profile-name").value });
     box.replaceChildren(
-      el("div", "okc", `Script généré : ${r.path}`),
-      el("div", "", `${r.path_count} entrée(s) PATH Utilisateur · ${r.variable_count} variable(s) · -WhatIf pour simuler, -OnlyExisting pour ignorer les dossiers absents`),
+      el("div", "okc", t("script_done", { path: r.path })),
+      el("div", "", t("script_counts", { u: r.path_count, v: r.variable_count })),
       el("div", "", "powershell -NoProfile -ExecutionPolicy Bypass -File .\\setup-env.ps1 -WhatIf"),
     );
-    if (r.skipped_secrets.length) box.append(el("div", "wc", `Exclues (nom évoquant un secret) : ${r.skipped_secrets.join(", ")}`));
-    const copy = el("button", "btn sm");
-    copy.style.marginTop = "8px";
-    copy.append(icon("copy", 12), "Copier le script");
-    copy.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(r.script);
-        copy.replaceChildren(icon("check", 12), "Copié");
-      } catch {
-        copy.textContent = "Copie refusée : ouvre le fichier ci-dessus";
-      }
-    });
-    box.append(copy);
+    if (r.skipped_secrets.length) box.append(el("div", "wc", t("skipped_secrets", { list: r.skipped_secrets.join(", ") })));
+    box.append(copyButton(t("copy_script"), r.script));
     box.classList.remove("hidden");
-    toast("Script PowerShell généré : sans secret, sans nom d'utilisateur, exécutable sans droits administrateur.");
+    toast(t("script_toast"));
   } catch (err) {
-    toast(`Export du script impossible : ${err}`, "error");
+    toast(t("script_failed", { err }), "error");
   }
 }
 
@@ -671,20 +683,20 @@ async function onProfile(profile) {
   try {
     plan = await invoke("preview_profile", { profile });
   } catch (err) {
-    toast(`Profil refusé : ${err}`, "error");
+    toast(t("profile_refused", { err }), "error");
     return;
   }
   if (plan.new_user_path === null && plan.variables.length === 0) {
-    toast(`Profil « ${plan.name} » : rien à modifier, ton environnement est déjà conforme.` + (plan.notes.length ? ` (${plan.notes.join(" ; ")})` : ""));
+    toast(t("profile_nothing", { name: plan.name }) + (plan.notes.length ? ` (${plan.notes.join(" ; ")})` : ""));
     return;
   }
   const ok = await confirmModal({
-    title: `Appliquer le profil « ${plan.name} »`,
-    subtitle: `${plan.path_added.length} ajout(s), ${plan.path_removed.length} retrait(s) dans le PATH Utilisateur · ${plan.variables.length} variable(s)`,
+    title: t("profile_title", { name: plan.name }),
+    subtitle: t("profile_sub", { a: plan.path_added.length, r: plan.path_removed.length, v: plan.variables.length }),
     diff: profileDiff(plan),
-    warning: plan.system_entries_ignored ? `${plan.system_entries_ignored} entrée(s) PATH Système du profil sont ignorées (jamais appliquées).` : "",
-    note: "Seul HKCU est modifié. Sauvegarde automatique avant l'écriture (variables comprises).",
-    confirmLabel: "Appliquer",
+    warning: plan.system_entries_ignored ? t("profile_sys_warn", { n: plan.system_entries_ignored }) : "",
+    note: t("profile_note"),
+    confirmLabel: t("apply_btn"),
     iconName: "braces",
     tone: "primary",
   });
@@ -693,12 +705,13 @@ async function onProfile(profile) {
     const res = await invoke("apply_profile", { profile });
     toast(
       res.changed
-        ? `Profil appliqué (${res.variables_changed} variable(s), PATH ${res.path_changed ? "modifié" : "inchangé"}). Sauvegarde : ${res.backup_file}.` + notifySync(res.broadcast)
-        : "Rien à modifier.",
+        ? t("profile_applied", { vars: res.variables_changed, path: t(res.path_changed ? "path_changed" : "path_unchanged"), backup: res.backup_file }) +
+            notifySync(res.broadcast)
+        : t("nothing_to_change"),
       res.broadcast || !res.changed ? "ok" : "warn",
     );
   } catch (err) {
-    toast(`Échec : ${err}`, "error");
+    toast(t("failed", { err }), "error");
   }
   await refreshAll();
 }
@@ -721,12 +734,28 @@ async function refreshAll() {
     renderAdmin();
     renderTable();
     for (const k of ["user", "system"]) {
-      if (report[k].error) toast(`Lecture du PATH ${k === "user" ? "Utilisateur" : "Système"} : ${report[k].error}`, "error");
+      if (report[k].error) toast(t("read_path_failed", { scope: scopeName(k === "user" ? "User" : "System"), err: report[k].error }), "error");
     }
   } catch (err) {
-    toast(`Lecture du Registre impossible : ${err}`, "error");
+    toast(t("read_registry_failed", { err }), "error");
   }
   await Promise.all([refreshPlans(), refreshBackups(), refreshLengths(), refreshConflicts()]);
+}
+
+// ── Langue : sélecteur FR / EN, transmis au backend (erreurs, risques, presets, script exporté) ──
+async function applyLanguage() {
+  applyStatic();
+  $("#lang").value = getLang();
+  const name = $("#profile-name");
+  if (DEFAULT_PROFILE_NAMES.includes(name.value)) name.value = t("profile_name_default"); // nom par défaut non modifié
+  renderSync();
+  renderAdmin();
+  if (report) renderTable();
+  try {
+    await invoke("set_language", { lang: getLang() });
+  } catch { /* le backend reste en français */ }
+  // Textes venant du backend (risques, presets, raisons de nettoyage) : on les redemande.
+  await Promise.all([refreshPresets(), refreshAll()]);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -735,6 +764,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
   $("#nav-path").addEventListener("click", () => showView("path"));
   $("#nav-profiles").addEventListener("click", () => showView("profiles"));
+  $("#lang").addEventListener("change", (e) => {
+    setLang(e.target.value);
+    applyLanguage();
+  });
 
   $("#q").addEventListener("input", (e) => setFilter("q", e.target.value));
   $("#q-clear").addEventListener("click", () => {
@@ -768,6 +801,5 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#btn-import").addEventListener("click", () => $("#file-import").click());
   $("#file-import").addEventListener("change", (e) => onImportFile(e.target.files[0]));
 
-  refreshPresets();
-  refreshAll();
+  applyLanguage(); // textes statiques, set_language, puis presets et données
 });

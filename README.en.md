@@ -12,7 +12,7 @@
 
 Over the years of installing Python, Node, Java, Git, SDKs…, the `PATH` fills up with folders that no longer exist, duplicate entries, and binaries that shadow each other. DevEnv Doctor reads the registry, shows you exactly what is wrong, then fixes it with a preview, an automatic backup and one-click restore.
 
-Native desktop app (Rust + Tauri v2), a single executable under 5 MB. Nothing is sent over the Internet. The interface is currently in French.
+Native desktop app (Rust + Tauri v2), a single executable under 5 MB. Nothing is sent over the Internet. The interface is available in **French and English** (FR/EN selector in the top bar; defaults to the system language and is remembered).
 
 ## 🎨 Interface preview
 
@@ -71,7 +71,7 @@ Before any write, a **"Git diff" style confirmation modal** shows exactly what w
 ## Usage
 
 - **PATH tab**: a single table (System then User, in Windows resolution order) with the state of each entry: Valid, Orphan, Duplicate, Version conflict. Filter by keyword (`Ctrl+F`), state or scope; the counters at the top are clickable.
-- **Action bar**: *Backup*, *Orphans*, *Deduplicate*, *Compress* (buttons labelled in French in the UI: *Sauvegarder*, *Orphelins*, *Dédoublonner*, *Compresser*). The **Scope** selector limits the action to User, System or both. Every action opens a diff preview before writing.
+- **Action bar**: *Backup*, *Orphans*, *Deduplicate*, *Compress*. The **Scope** selector limits the action to User, System or both. Every action opens a diff preview before writing.
 - **Profiles & Dotfiles tab**: JSON export, profile import, PowerShell script export, presets and the list of backups to restore.
 - **Generated script**: to try it without changing anything, run
   `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-env.ps1 -WhatIf`
