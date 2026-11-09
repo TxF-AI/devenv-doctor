@@ -8,7 +8,10 @@ const HIVE = { User: "HKCU\\Environment", System: "HKLM\\…\\Session Manager\\E
 
 let report = null;
 let isAdmin = false;
-let plans = { orphans: null, duplicates: null };
+let plans = { orphans: null, duplicates: null, compress: null };
+let lengths = null;
+let conflicts = new Map(); // "Scope:index" → { total, names[] }
+let lastMoved = null; // { scope, path } : ligne à faire clignoter après un déplacement
 const filters = { q: "", scope: "all", state: "all" };
 
 const $ = (sel) => document.querySelector(sel);
@@ -28,14 +31,20 @@ const fmtTime = (d = new Date()) => d.toLocaleTimeString("fr-FR");
 
 /** Ordre de résolution Windows : Système puis Utilisateur. */
 function allEntries() {
-  return [...report.system.entries, ...report.user.entries].map((e, i) => ({ ...e, n: i + 1 }));
+  const tag = (list) => list.map((e, idx) => ({ ...e, idx, scopeLen: list.length }));
+  return [...tag(report.system.entries), ...tag(report.user.entries)].map((e, i) => ({ ...e, n: i + 1 }));
 }
+
+const conflictOf = (e) => conflicts.get(`${e.scope}:${e.idx}`);
+/** Numéro (#) affiché d'une entrée désignée par (scope, index dans le scope). */
+const numberOf = (scope, index) => (scope === "System" ? 0 : report.system.entries.length) + index + 1;
 
 function matches(e) {
   if (filters.scope !== "all" && e.scope !== filters.scope) return false;
   if (filters.state === "ok" && !e.exists) return false;
   if (filters.state === "orphan" && e.exists) return false;
   if (filters.state === "dup" && !e.is_duplicate) return false;
+  if (filters.state === "conflict" && !conflictOf(e)) return false;
   const q = filters.q.trim().toLowerCase();
   return !q || e.raw_path.toLowerCase().includes(q) || e.expanded_path.toLowerCase().includes(q);
 }
@@ -55,6 +64,7 @@ function renderStats(all) {
     ["Valides", all.filter((e) => e.exists).length, "ok", "var(--ok)"],
     ["Orphelins", all.filter((e) => !e.exists).length, "orphan", "var(--bad)"],
     ["Doublons", all.filter((e) => e.is_duplicate).length, "dup", "var(--warn)"],
+    ["Conflits", all.filter((e) => conflictOf(e)).length, "conflict", "var(--warn)"],
   ];
   $("#stats").replaceChildren(
     ...c.map(([k, v, state, color]) => {
@@ -75,13 +85,57 @@ function row(e) {
   const st = el("td", "st");
   st.append(e.exists ? badge("Valide", "ok") : badge("Orphelin", "bad", "circle-alert"));
   if (e.is_duplicate) st.append(badge("Doublon", "warn", "copy"));
+  const bs = el("div", "bs");
+  while (st.firstChild) bs.append(st.firstChild);
+  const cf = conflictOf(e);
+  if (cf) {
+    const b = badge("Conflit de version", "conf", "arrow-left-right");
+    b.title = conflictTitle(cf);
+    bs.append(b);
+  }
+  st.append(bs);
   const sc = el("td", "sc");
   sc.append(badge(e.scope === "System" ? "HKLM" : "HKCU", "scope"));
   const p = el("td", "path");
   p.append(el("div", "raw", e.raw_path));
   if (e.expanded_path !== e.raw_path) p.append(el("div", "exp", e.expanded_path));
-  tr.append(st, sc, p);
+  if (cf) p.append(el("div", "cf", conflictLine(cf)));
+  const act = el("td", "act");
+  act.append(moveButtons(e));
+  tr.append(st, sc, p, act);
+  if (lastMoved && lastMoved.scope === e.scope && lastMoved.path === e.raw_path) {
+    tr.classList.add("flash");
+    lastMoved = null;
+  }
   return tr;
+}
+
+/** « node.exe (masqué par #14) · python.exe (gagne) » : 4 noms au plus, le reste en infobulle. */
+function conflictLine(cf) {
+  const part = (n) => (n.wins ? `${n.name} (gagne)` : `${n.name} (masqué par #${numberOf(n.other_scope, n.other_index)})`);
+  const shown = cf.names.slice(0, 4).map(part).join(" · ");
+  return cf.total > 4 ? `${shown} · +${cf.total - 4}` : shown;
+}
+const conflictTitle = (cf) =>
+  cf.names.map((n) => (n.wins ? `${n.name} : c'est cette entrée qui est lancée` : `${n.name} : masqué par l'entrée #${numberOf(n.other_scope, n.other_index)}`)).join("\n");
+
+function moveButtons(e) {
+  const box = el("span", "mv");
+  const needAdmin = e.scope === "System" && !isAdmin;
+  const mk = (dir, ic, label, disabled) => {
+    const b = el("button", "");
+    b.append(icon(ic, 13));
+    b.title = needAdmin ? "Droits Administrateur requis (PATH Système)" : label;
+    b.setAttribute("aria-label", `${label} : ${e.raw_path}`);
+    b.disabled = disabled || needAdmin;
+    b.addEventListener("click", () => onMove(e, dir));
+    return b;
+  };
+  box.append(
+    mk("up", "chevron-up", "Monter (plus prioritaire)", e.idx === 0),
+    mk("down", "chevron-down", "Descendre (moins prioritaire)", e.idx === e.scopeLen - 1),
+  );
+  return box;
 }
 
 function renderTable() {
@@ -91,6 +145,7 @@ function renderTable() {
   $("#empty").classList.toggle("hidden", shown.length > 0);
   $("#count-txt").textContent = `${shown.length}/${all.length} entrées affichées`;
   renderStats(all);
+  renderLens();
   $("#q-clear").classList.toggle("hidden", filters.q === "");
   for (const [id, key] of [["#chips-state", "state"], ["#chips-scope", "scope"]]) {
     $(id).querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.v === filters[key])));
@@ -99,6 +154,66 @@ function renderTable() {
 
 function setFilter(key, value) {
   filters[key] = value;
+  if (report) renderTable();
+}
+
+// ─────────────── Longueur du PATH ───────────────
+
+const METER_MAX = 8192;
+const METER_TICKS = [1024, 2048]; // 8192 = fin de la jauge
+const RISK_COLOR = { ok: "var(--ok)", near: "var(--warn)", medium: "var(--warn)", high: "var(--bad)", critical: "var(--bad)" };
+const RISK_CLASS = { ok: "", near: "warn", medium: "warn", high: "bad", critical: "bad" };
+const fmtNum = (n) => n.toLocaleString("fr-FR");
+
+function renderLens() {
+  const box = $("#lens");
+  if (!lengths) {
+    box.replaceChildren();
+    return;
+  }
+  const cells = [
+    ["HKCU · valeur brute", lengths.user, "Longueur de la valeur Path stockée dans HKCU."],
+    ["HKLM · valeur brute", lengths.system, "Longueur de la valeur Path stockée dans HKLM."],
+    ["Effectif · HKLM;HKCU", lengths.combined, "PATH vu par un programme : Système + « ; » + Utilisateur, variables développées."],
+  ];
+  box.replaceChildren(
+    ...cells.map(([label, info, tip]) => {
+      const c = el("div", "lens-cell");
+      c.title = tip;
+      const top = el("div", "lens-top");
+      top.append(el("span", "k", label), el("span", "v", `${fmtNum(info.length)} car.`));
+      const meter = el("div", "meter");
+      const fill = el("i");
+      fill.style.width = `${Math.min(100, (info.length / METER_MAX) * 100)}%`;
+      fill.style.setProperty("--c", RISK_COLOR[info.risk.level]);
+      meter.append(fill);
+      for (const t of METER_TICKS) {
+        const tick = el("b");
+        tick.style.left = `${(t / METER_MAX) * 100}%`;
+        meter.append(tick);
+      }
+      c.append(top, meter, el("div", `lens-msg ${RISK_CLASS[info.risk.level]}`, info.risk.message));
+      return c;
+    }),
+  );
+}
+
+async function refreshLengths() {
+  try {
+    lengths = await invoke("get_path_lengths");
+  } catch {
+    lengths = null; // la jauge disparaît plutôt que d'afficher un chiffre inventé
+  }
+  renderLens();
+}
+
+async function refreshConflicts() {
+  try {
+    const list = await invoke("analyze_conflicts");
+    conflicts = new Map(list.map((c) => [`${c.scope}:${c.index}`, c]));
+  } catch {
+    conflicts = new Map();
+  }
   if (report) renderTable();
 }
 
@@ -116,6 +231,9 @@ function renderButtons() {
   $("#cnt-dups").textContent = String(n(plans.duplicates));
   $("#btn-orphans").disabled = n(plans.orphans) === 0;
   $("#btn-dups").disabled = n(plans.duplicates) === 0;
+  const saved = plans.compress ? plans.compress.saved_chars : 0;
+  $("#cnt-compress").textContent = saved ? `−${saved}` : "0";
+  $("#btn-compress").disabled = !plans.compress || plans.compress.changes.length === 0;
 }
 
 // ─────────────── Toasts & LED WM_SETTINGCHANGE ───────────────
@@ -220,13 +338,14 @@ function confirmModal({ title, subtitle, diff, warning, note, confirmLabel, canC
 
 async function refreshPlans() {
   try {
-    const [orphans, duplicates] = await Promise.all([
+    const [orphans, duplicates, compress] = await Promise.all([
       invoke("preview_cleanup", { kind: "orphans", scope: scopeSel() }),
       invoke("preview_cleanup", { kind: "duplicates", scope: scopeSel() }),
+      invoke("preview_compress", { scope: scopeSel() }),
     ]);
-    plans = { orphans, duplicates };
+    plans = { orphans, duplicates, compress };
   } catch (err) {
-    plans = { orphans: null, duplicates: null };
+    plans = { orphans: null, duplicates: null, compress: null };
     toast(`Aperçu impossible : ${err}`, "error");
   }
   renderButtons();
@@ -285,6 +404,61 @@ async function onCleanup(kind) {
     else toast(done + notifySync(res.broadcast), res.broadcast ? "ok" : "warn");
   } catch (err) {
     toast(isAdminError(err) ? `${err}` : `Échec : ${err}`, "error");
+  }
+  await refreshAll();
+}
+
+function compressDiff(plan) {
+  const lines = [];
+  for (const scope of ["System", "User"]) {
+    const ch = plan.changes.filter((c) => c.scope === scope);
+    if (!ch.length) continue;
+    lines.push({ t: "hunk", text: `@@ ${HIVE[scope]} · Path @@` });
+    for (const c of ch) {
+      lines.push({ t: "del", text: c.old });
+      lines.push({ t: "add", text: c.new, sub: `−${c.old.length - c.new.length} car.` });
+    }
+  }
+  return lines;
+}
+
+async function onCompress() {
+  const plan = plans.compress;
+  if (!plan || plan.changes.length === 0) return;
+  const scope = scopeSel();
+  const blocked = plan.requires_admin && !plan.is_admin;
+  const ok = await confirmModal({
+    title: "Compresser le PATH",
+    subtitle: `${plan.changes.length} entrée(s) · −${plan.saved_chars} caractère(s) · portée : ${SCOPE_NAMES[scope]}`,
+    diff: compressDiff(plan),
+    warning: blocked
+      ? "Droits Administrateur requis : des entrées du PATH Système sont concernées. Relance l'application en administrateur, ou choisis la portée « Utilisateur »."
+      : "",
+    note: "Équivalent pour Windows (variables développées au lancement). Jamais de variable propre à l'utilisateur dans le PATH Système. Sauvegarde automatique.",
+    confirmLabel: blocked ? "Admin requis" : "Compresser",
+    canConfirm: !blocked,
+    iconName: "shrink",
+    tone: "primary",
+  });
+  if (!ok) return;
+  try {
+    const res = await invoke("compress_path", { scope });
+    toast(`PATH compressé : −${res.saved_chars} caractère(s) sur ${res.changes.length} entrée(s). Sauvegarde : ${res.backup_file ?? "aucune"}.` + notifySync(res.broadcast), res.broadcast ? "ok" : "warn");
+  } catch (err) {
+    toast(isAdminError(err) ? `${err}` : `Échec : ${err}`, "error");
+  }
+  await refreshAll();
+}
+
+/** Monte/descend une entrée dans son scope ; le texte vu est renvoyé pour détecter un PATH modifié entre-temps. */
+async function onMove(e, direction) {
+  try {
+    const res = await invoke("move_path_entry", { scope: e.scope, index: e.idx, direction, expectedPath: e.raw_path });
+    lastMoved = { scope: e.scope, path: e.raw_path };
+    notifySync(res.broadcast);
+    if (!res.broadcast) toast("Entrée déplacée, mais la diffusion à Windows a expiré : relance tes terminaux.", "warn");
+  } catch (err) {
+    toast(isAdminError(err) ? `${err}` : `Déplacement impossible : ${err}`, "error");
   }
   await refreshAll();
 }
@@ -444,6 +618,35 @@ async function onImportFile(file) {
   }
 }
 
+async function onExportScript() {
+  const box = $("#script-result");
+  try {
+    const r = await invoke("export_powershell", { name: $("#profile-name").value });
+    box.replaceChildren(
+      el("div", "okc", `Script généré : ${r.path}`),
+      el("div", "", `${r.path_count} entrée(s) PATH Utilisateur · ${r.variable_count} variable(s) · -WhatIf pour simuler, -OnlyExisting pour ignorer les dossiers absents`),
+      el("div", "", "powershell -NoProfile -ExecutionPolicy Bypass -File .\\setup-env.ps1 -WhatIf"),
+    );
+    if (r.skipped_secrets.length) box.append(el("div", "wc", `Exclues (nom évoquant un secret) : ${r.skipped_secrets.join(", ")}`));
+    const copy = el("button", "btn sm");
+    copy.style.marginTop = "8px";
+    copy.append(icon("copy", 12), "Copier le script");
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(r.script);
+        copy.replaceChildren(icon("check", 12), "Copié");
+      } catch {
+        copy.textContent = "Copie refusée : ouvre le fichier ci-dessus";
+      }
+    });
+    box.append(copy);
+    box.classList.remove("hidden");
+    toast("Script PowerShell généré : sans secret, sans nom d'utilisateur, exécutable sans droits administrateur.");
+  } catch (err) {
+    toast(`Export du script impossible : ${err}`, "error");
+  }
+}
+
 function profileDiff(plan) {
   const lines = [];
   if (plan.path_added.length || plan.path_removed.length) {
@@ -523,7 +726,7 @@ async function refreshAll() {
   } catch (err) {
     toast(`Lecture du Registre impossible : ${err}`, "error");
   }
-  await Promise.all([refreshPlans(), refreshBackups()]);
+  await Promise.all([refreshPlans(), refreshBackups(), refreshLengths(), refreshConflicts()]);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -557,6 +760,8 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#btn-backup").addEventListener("click", onBackup);
   $("#btn-orphans").addEventListener("click", () => onCleanup("orphans"));
   $("#btn-dups").addEventListener("click", () => onCleanup("duplicates"));
+  $("#btn-compress").addEventListener("click", onCompress);
+  $("#btn-script").addEventListener("click", onExportScript);
   $("#scope-select").addEventListener("change", refreshPlans);
 
   $("#btn-export").addEventListener("click", onExport);

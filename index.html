@@ -23,6 +23,7 @@
         <span class="sep"></span>
         <button id="btn-orphans" class="btn bad" title="Retirer les entrées dont le dossier n'existe plus"><span data-icon="eraser"></span>Orphelins <span class="count" id="cnt-orphans">0</span></button>
         <button id="btn-dups" class="btn warn" title="Garder la première occurrence de chaque chemin"><span data-icon="git-merge"></span>Dédoublonner <span class="count" id="cnt-dups">0</span></button>
+        <button id="btn-compress" class="btn info" title="Remplacer C:\Users\&lt;nom&gt;, AppData et le dossier Windows par des variables (%USERPROFILE%, %LOCALAPPDATA%, %windir%…) pour raccourcir le PATH"><span data-icon="shrink"></span>Compresser <span class="count" id="cnt-compress">0</span></button>
         <span class="sep"></span>
         <label class="lbl" for="scope-select">Portée</label>
         <select id="scope-select" class="input">
@@ -34,6 +35,7 @@
 
       <main id="view-path" class="view" style="display:flex;flex-direction:column">
         <div id="stats" class="stats"></div>
+        <div id="lens" class="lens" aria-label="Longueur du PATH"></div>
         <div class="filters">
           <div class="search">
             <span data-icon="search"></span>
@@ -45,6 +47,7 @@
             <button class="chip" data-v="ok" aria-pressed="false">Valide</button>
             <button class="chip" data-v="orphan" aria-pressed="false">Orphelin</button>
             <button class="chip" data-v="dup" aria-pressed="false">Doublon</button>
+            <button class="chip" data-v="conflict" aria-pressed="false">Conflit</button>
           </div>
           <div class="chips" role="group" aria-label="Filtrer par scope" id="chips-scope">
             <button class="chip" data-v="all" aria-pressed="true">Tous scopes</button>
@@ -54,8 +57,8 @@
         </div>
         <div style="flex:1;min-height:0;overflow:auto">
           <table>
-            <colgroup><col style="width:3px" /><col style="width:44px" /><col style="width:158px" /><col style="width:64px" /><col /></colgroup>
-            <thead><tr><th></th><th style="text-align:right">#</th><th>État</th><th>Scope</th><th>Chemin</th></tr></thead>
+            <colgroup><col style="width:3px" /><col style="width:44px" /><col style="width:190px" /><col style="width:64px" /><col /><col style="width:60px" /></colgroup>
+            <thead><tr><th></th><th style="text-align:right">#</th><th>État</th><th>Scope</th><th>Chemin</th><th title="Priorité : monter ou descendre l'entrée dans son scope">Ordre</th></tr></thead>
             <tbody id="rows"></tbody>
           </table>
           <div id="empty" class="empty hidden">Aucune entrée ne correspond au filtre.</div>
@@ -77,9 +80,11 @@
           <div class="row">
             <button id="btn-export" class="btn primary"><span data-icon="download"></span>Exporter la conf (Dotfiles)</button>
             <button id="btn-import" class="btn info"><span data-icon="upload"></span>Importer un profil</button>
+            <button id="btn-script" class="btn" title="Script setup-env.ps1 pour reconfigurer un PC vierge, sans installer d'application"><span data-icon="scroll-text"></span>Exporter en script PowerShell (.ps1)</button>
             <input id="file-import" type="file" accept=".json,application/json" class="hidden" />
           </div>
           <div id="export-result" class="res hidden"></div>
+          <div id="script-result" class="res hidden"></div>
         </div>
         <h2 class="h2">Presets</h2>
         <ul id="presets" class="list"></ul>

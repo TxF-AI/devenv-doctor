@@ -427,6 +427,36 @@ fn real_plan(profile: &EnvironmentProfile) -> Result<ProfilePlan, String> {
     )
 }
 
+/// Profil de l'état actuel (HKCU + variables utilisateur), sans secrets ni nom d'utilisateur.
+fn collect_export(name: &str, description: &str) -> Result<(EnvironmentProfile, Vec<String>), String> {
+    let user = read_path_value(HKEY_CURRENT_USER, USER_KEY)?;
+    let system = read_path_value(winreg::enums::HKEY_LOCAL_MACHINE, crate::SYSTEM_KEY)?;
+    let vars = read_user_vars()?;
+    let userprofile = std::env::var("USERPROFILE").ok();
+    let (profile, skipped) = build_export(
+        name,
+        description,
+        &chrono::Local::now().to_rfc3339(),
+        user.as_ref().map(|(r, _, _)| r.as_str()),
+        system.as_ref().map(|(r, _, _)| r.as_str()),
+        &vars,
+        userprofile.as_deref(),
+    );
+    validate_profile(&profile)?;
+    Ok((profile, skipped))
+}
+
+fn profiles_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Dossier de données introuvable : {e}"))?
+        .join("profiles");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Création de {} impossible : {e}", dir.display()))?;
+    Ok(dir)
+}
+
 #[tauri::command]
 pub async fn list_presets() -> Vec<EnvironmentProfile> {
     builtin_presets()
@@ -440,28 +470,9 @@ pub async fn export_profile(
     name: String,
     description: String,
 ) -> Result<ExportResult, String> {
-    use tauri::Manager;
-    let user = read_path_value(HKEY_CURRENT_USER, USER_KEY)?;
-    let system = read_path_value(winreg::enums::HKEY_LOCAL_MACHINE, crate::SYSTEM_KEY)?;
-    let vars = read_user_vars()?;
-    let userprofile = std::env::var("USERPROFILE").ok();
-    let (profile, skipped_secrets) = build_export(
-        &name,
-        &description,
-        &chrono::Local::now().to_rfc3339(),
-        user.as_ref().map(|(r, _, _)| r.as_str()),
-        system.as_ref().map(|(r, _, _)| r.as_str()),
-        &vars,
-        userprofile.as_deref(),
-    );
-    validate_profile(&profile)?;
+    let (profile, skipped_secrets) = collect_export(&name, &description)?;
     let json = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Dossier de données introuvable : {e}"))?
-        .join("profiles");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Création de {} impossible : {e}", dir.display()))?;
+    let dir = profiles_dir(&app)?;
     let file = dir.join(format!("{}.json", sanitize_file_name(&profile.name)));
     std::fs::write(&file, &json).map_err(|e| format!("Écriture de {} impossible : {e}", file.display()))?;
     Ok(ExportResult {
@@ -519,6 +530,194 @@ pub async fn apply_profile(app: tauri::AppHandle, profile: EnvironmentProfile) -
 }
 
 // ───────────────────────── Tests ─────────────────────────
+
+// ───────────────────────── Script PowerShell (bootstrap) ─────────────────────────
+
+/// Chaîne PowerShell entre apostrophes. PowerShell traite aussi ‘ ’ ‚ ‛ comme des
+/// apostrophes : chacune est doublée (sinon une valeur pourrait fermer la chaîne
+/// et injecter du code dans le script généré).
+pub fn ps_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for c in s.chars() {
+        out.push(c);
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// Texte sûr pour un commentaire `<# … #>` : ni `#`, ni `<`, ni `>`, ni saut de ligne.
+fn comment_safe(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric() || " -_.():".contains(*c)).take(64).collect()
+}
+
+const PS_TEMPLATE: &str = r#"<#
+.SYNOPSIS
+    Reconfigure l'environnement utilisateur (PATH et variables) sur un PC vierge.
+
+.DESCRIPTION
+    Script généré par DevEnv Doctor le __DATE__ à partir du profil « __NAME__ ».
+
+    - Modifie uniquement l'environnement UTILISATEUR : aucun droit administrateur requis,
+      le PATH Système n'est jamais touché.
+    - Ne contient aucun secret : les variables dont le nom évoque un token, une clé ou
+      un mot de passe ont été exclues lors de l'export.
+    - Peut être relancé sans risque : une entrée déjà présente n'est pas ajoutée deux fois.
+    - Les %VARIABLES% sont développées sur CE PC au moment de l'exécution.
+
+.PARAMETER OnlyExisting
+    N'ajoute au PATH que les dossiers déjà présents sur ce PC.
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-env.ps1 -WhatIf
+    Affiche ce qui serait fait, sans rien modifier.
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-env.ps1 -OnlyExisting
+#>
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [switch]$OnlyExisting
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# --- Données du profil --------------------------------------------------------
+
+# Entrées du PATH utilisateur, de la plus prioritaire à la moins prioritaire.
+$PathEntries = @(
+__PATHS__
+)
+
+# Variables d'environnement utilisateur (nom = valeur).
+$Variables = [ordered]@{
+__VARS__
+}
+
+# --- Outils -------------------------------------------------------------------
+
+# SetEnvironmentVariable écrit toujours une valeur de type REG_SZ : Windows ne
+# développerait jamais un « %USERPROFILE% » laissé tel quel. On développe donc ici.
+# (Les entrées déjà présentes dans le PATH sont relues déjà développées par .NET.)
+function Expand-Value([string]$Value) {
+    return [Environment]::ExpandEnvironmentVariables($Value)
+}
+
+function Get-PathKey([string]$Path) {
+    return $Path.Trim().TrimEnd('\').ToLowerInvariant()
+}
+
+# --- Sauvegarde de l'état actuel (sauf avec -WhatIf) ----------------------------
+if (-not $WhatIfPreference) {
+    $backupFile = Join-Path $env:TEMP ('setup-env-backup-{0:yyyyMMdd-HHmmss}.json' -f (Get-Date))
+    $saved = [ordered]@{ Path = [Environment]::GetEnvironmentVariable('Path', 'User') }
+    foreach ($name in $Variables.Keys) {
+        $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'User')
+    }
+    $saved | ConvertTo-Json | Set-Content -LiteralPath $backupFile -Encoding UTF8
+    Write-Host "Sauvegarde de l'état actuel : $backupFile"
+}
+
+# --- PATH utilisateur -----------------------------------------------------------
+$current = [Environment]::GetEnvironmentVariable('Path', 'User')
+$list = New-Object System.Collections.Generic.List[string]
+if ($current) {
+    foreach ($part in $current.Split(';')) {
+        if ($part.Trim()) { $list.Add($part.Trim()) }
+    }
+}
+$known = @{}
+foreach ($entry in $list) { $known[(Get-PathKey (Expand-Value $entry))] = $true }
+
+$added = 0
+foreach ($entry in $PathEntries) {
+    $expanded = Expand-Value $entry
+    if ($known.ContainsKey((Get-PathKey $expanded))) {
+        Write-Host "= déjà dans le PATH : $expanded"
+        continue
+    }
+    if ($OnlyExisting -and -not (Test-Path -LiteralPath $expanded)) {
+        Write-Host "~ ignoré (dossier absent) : $expanded"
+        continue
+    }
+    $list.Add($expanded)
+    $known[(Get-PathKey $expanded)] = $true
+    $added++
+    Write-Host "+ PATH : $expanded"
+}
+if ($added -gt 0 -and $PSCmdlet.ShouldProcess('PATH utilisateur', "ajouter $added entrée(s)")) {
+    [Environment]::SetEnvironmentVariable('Path', ($list -join ';'), 'User')
+}
+
+# --- Variables ------------------------------------------------------------------
+foreach ($name in $Variables.Keys) {
+    $value = Expand-Value ([string]$Variables[$name])
+    if ([Environment]::GetEnvironmentVariable($name, 'User') -eq $value) {
+        Write-Host "= déjà définie : $name"
+        continue
+    }
+    if ($PSCmdlet.ShouldProcess("variable $name", 'définir')) {
+        [Environment]::SetEnvironmentVariable($name, $value, 'User')
+        Write-Host "+ $name = $value"
+    }
+}
+
+Write-Host ''
+Write-Host 'Terminé. Ouvre un nouveau terminal pour voir les changements.'
+"#;
+
+/// Script `setup-env.ps1` (texte LF ; l'écriture fichier ajoute BOM et CRLF).
+pub fn build_powershell(p: &EnvironmentProfile, generated: &str) -> String {
+    let paths = p.path_user.iter().map(|e| format!("    {}", ps_quote(e))).collect::<Vec<_>>().join(",\n");
+    let vars = p
+        .variables
+        .iter()
+        .map(|(k, v)| format!("    {} = {}", ps_quote(k), ps_quote(v)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    PS_TEMPLATE
+        .replace("__DATE__", &comment_safe(generated))
+        .replace("__NAME__", &comment_safe(&p.name))
+        .replace("__PATHS__", &paths)
+        .replace("__VARS__", &vars)
+}
+
+/// PowerShell 5.1 lit un .ps1 sans BOM en ANSI : sans BOM, les accents sont cassés.
+pub fn ps_file_bytes(script: &str) -> Vec<u8> {
+    let mut b = vec![0xEF, 0xBB, 0xBF];
+    b.extend_from_slice(script.replace("\r\n", "\n").replace('\n', "\r\n").as_bytes());
+    b
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct ScriptExport {
+    pub path: String,
+    pub script: String,
+    pub path_count: usize,
+    pub variable_count: usize,
+    pub skipped_secrets: Vec<String>,
+}
+
+/// Écrit `profiles/setup-env.ps1` : script autonome qui reconfigure l'environnement
+/// UTILISATEUR d'un PC vierge, sans installer d'application. Mêmes exclusions que l'export JSON.
+#[tauri::command]
+pub async fn export_powershell(app: tauri::AppHandle, name: String) -> Result<ScriptExport, String> {
+    let (profile, skipped_secrets) = collect_export(&name, "")?;
+    let script = build_powershell(&profile, &chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
+    let file = profiles_dir(&app)?.join("setup-env.ps1");
+    std::fs::write(&file, ps_file_bytes(&script)).map_err(|e| format!("Écriture de {} impossible : {e}", file.display()))?;
+    Ok(ScriptExport {
+        path: file.display().to_string(),
+        script,
+        path_count: profile.path_user.len(),
+        variable_count: profile.variables.len(),
+        skipped_secrets,
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -710,5 +909,37 @@ mod tests {
         // Appel réel mais inoffensif : aucune variable n'a changé. Le résultat dépend de
         // l'état des fenêtres du bureau, on vérifie surtout que l'appel FFI est sain.
         let _ = broadcast_environment_change();
+    }
+
+    #[test]
+    fn ps_quote_double_toutes_les_apostrophes_y_compris_typographiques() {
+        assert_eq!(ps_quote("a'b"), "'a''b'");
+        assert_eq!(ps_quote("a\u{2018}b\u{2019}c"), "'a\u{2018}\u{2018}b\u{2019}\u{2019}c'");
+        assert_eq!(ps_quote(r"C:\Users\O'Brien\bin"), r"'C:\Users\O''Brien\bin'");
+        assert_eq!(ps_quote(""), "''");
+    }
+
+    #[test]
+    fn script_powershell_genere() {
+        let mut p = profile(ApplyMode::Replace, &[r"%USERPROFILE%\.cargo\bin", r"D:\O'Brien"], false);
+        p.name = "Mon <#PC#> \n evil".into();
+        p.variables.insert("EDITOR".into(), "code 'x'".into());
+        let s = build_powershell(&p, "2026-11-09 19:30");
+        assert!(s.contains("[Environment]::SetEnvironmentVariable('Path'") && s.contains("SupportsShouldProcess"));
+        assert!(s.contains("    '%USERPROFILE%\\.cargo\\bin',\n    'D:\\O''Brien'\n)"));
+        assert!(s.contains("    'EDITOR' = 'code ''x'''"));
+        assert!(s.contains("le 2026-11-09 19:30"));
+        // Le nom du profil ne peut ni fermer le commentaire ni injecter de ligne.
+        let header = s.split("#>").next().unwrap();
+        assert!(header.contains("Mon PC  evil") && !header.contains("<#PC#>"));
+        assert_eq!(s.matches("#>").count(), 1);
+        assert!(!s.contains("__"));
+    }
+
+    #[test]
+    fn fichier_ps1_a_un_bom_et_des_crlf() {
+        let b = ps_file_bytes("a\nb\r\nc");
+        assert_eq!(&b[..3], &[0xEF, 0xBB, 0xBF]);
+        assert_eq!(&b[3..], b"a\r\nb\r\nc");
     }
 }

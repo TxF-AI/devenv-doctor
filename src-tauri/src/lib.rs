@@ -1,4 +1,5 @@
 mod actions;
+mod optimize;
 mod profiles;
 
 use serde::Serialize;
@@ -194,7 +195,13 @@ pub fn run() {
             profiles::export_profile,
             profiles::import_profile,
             profiles::preview_profile,
-            profiles::apply_profile
+            profiles::apply_profile,
+            profiles::export_powershell,
+            optimize::get_path_lengths,
+            optimize::preview_compress,
+            optimize::compress_path,
+            optimize::move_path_entry,
+            optimize::analyze_conflicts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

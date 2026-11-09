@@ -108,7 +108,7 @@ body {
 select.input { padding-right: 4px; }
 
 /* ───────── Statistiques & filtres ───────── */
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid var(--line); }
 .stat {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   padding: 8px 14px; border: 0; border-right: 1px solid var(--line); background: none;
@@ -246,6 +246,41 @@ dialog::backdrop { background: rgba(5,6,10,.55); backdrop-filter: blur(12px); -w
 .dl.note { color: var(--muted); }
 .mf { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--bg); }
 .mf .note { flex: 1; color: var(--muted); font-size: 11px; }
+
+/* ───────── Longueur du PATH ───────── */
+.lens { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.lens-cell { padding: 7px 14px; border-right: 1px solid var(--line); min-width: 0; }
+.lens-cell:last-child { border-right: 0; }
+.lens-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.lens-top .k { color: var(--dim); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.lens-top .v { font-variant-numeric: tabular-nums; color: var(--text); }
+.meter { position: relative; height: 4px; margin: 5px 0 4px; background: var(--line); border-radius: 2px; }
+.meter > i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--c, var(--ok)); transition: width 200ms ease-out; }
+.meter > b { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--line-3); }
+.lens-msg { color: var(--muted); font-size: 10.5px; line-height: 1.3; min-height: 14px; }
+.lens-msg.warn { color: var(--warn); }
+.lens-msg.bad { color: var(--bad); }
+
+/* ───────── Réordonnancement & conflits ───────── */
+td.act, th.act { width: 1%; white-space: nowrap; text-align: right; }
+.mv { display: inline-flex; gap: 2px; opacity: .35; transition: opacity var(--t); }
+tbody tr:hover .mv, .mv:focus-within { opacity: 1; }
+.mv button {
+  width: 20px; height: 20px; display: grid; place-items: center; padding: 0;
+  border: 1px solid transparent; border-radius: 3px; background: none; color: var(--muted); cursor: pointer;
+  transition: background-color var(--t), color var(--t), border-color var(--t), transform var(--t);
+}
+.mv button:hover:not([disabled]) { color: var(--info); border-color: var(--line-3); background: var(--surface-2); }
+.mv button:active:not([disabled]) { transform: translateY(1px); }
+.mv button[disabled] { opacity: .25; cursor: not-allowed; }
+.mv button:focus-visible { outline: 1px solid var(--info); outline-offset: 1px; }
+.bs { display: flex; flex-wrap: wrap; gap: 3px; }
+.bs .badge { margin-right: 0; }
+.badge.conf { color: var(--warn); border-color: rgba(255,176,32,.38); border-style: dashed; background: rgba(255,176,32,.05); }
+.cf { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.cf::before { content: "⇄ "; color: var(--warn); }
+@keyframes flash { from { background: rgba(0,229,255,.18); } to { background: transparent; } }
+tr.flash td { animation: flash 700ms ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

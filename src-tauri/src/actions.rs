@@ -247,6 +247,27 @@ fn load_backup(path: &Path) -> Result<Backup, String> {
     Ok(b)
 }
 
+/// Sauvegarde la plus récente (nom de fichier + contenu), si lisible.
+pub(crate) fn latest_backup(dir: &Path) -> Option<(String, Backup)> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| n.starts_with("path-backup-") && n.ends_with(".json"))
+        .collect();
+    names.sort_unstable_by(|a, b| b.cmp(a));
+    let name = names.into_iter().next()?;
+    let b = load_backup(&dir.join(&name)).ok()?;
+    Some((name, b))
+}
+
+/// Faut-il réutiliser la sauvegarde la plus récente au lieu d'en créer une nouvelle ?
+/// Oui si elle a la même raison et date de moins de `window_secs` : une série de
+/// réordonnancements garde ainsi UNE sauvegarde de l'état d'avant la série.
+pub fn can_reuse_backup(latest_reason: &str, age_secs: Option<i64>, reason: &str, window_secs: i64) -> bool {
+    latest_reason == reason && age_secs.is_some_and(|a| (0..window_secs).contains(&a))
+}
+
 // ───────────────────────── Écriture Registre ─────────────────────────
 
 pub fn admin_error(what: &str) -> String {
@@ -308,7 +329,7 @@ impl ScopeSel {
             other => Err(format!("Scope inconnu : {other} (attendu : User, System ou All)")),
         }
     }
-    fn includes(self, scope: &str) -> bool {
+    pub(crate) fn includes(self, scope: &str) -> bool {
         matches!((self, scope), (Self::All, _) | (Self::User, "User") | (Self::System, "System"))
     }
 }
