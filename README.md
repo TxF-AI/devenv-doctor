@@ -11,6 +11,20 @@ Au fil des installations (Python, Node, Java, Git, SDK…), le `PATH` se remplit
 
 Application de bureau native (Rust + Tauri v2), un seul exécutable de moins de 5 Mo. Rien n'est envoyé sur Internet.
 
+## 🎨 Aperçu de l'Interface
+
+<p align="center">
+  <img src="assets/ui-preview.png" alt="DevEnv Doctor : tableau du PATH avec jauges de longueur, filtres et badges" width="900">
+</p>
+
+Interface **HUD cyberpunk compacte**, pensée comme un outil de développeur : fond obsidienne, accents réservés aux statuts, police monospace. Le tableau dense liste le PATH dans l'ordre de résolution de Windows, avec des **filtres dynamiques** (mot-clé, état, scope), des badges **Valide / Orphelin / Doublon / Conflit de version** (une barre rouge ou ambre sur le côté repère les lignes à traiter), les jauges de longueur du PATH et les boutons ⬆ / ⬇ de priorité.
+
+<p align="center">
+  <img src="assets/ui-diff.png" alt="DevEnv Doctor : modale de confirmation en mode diff Git" width="640">
+</p>
+
+Avant toute écriture, une **modale de confirmation en mode « diff Git »** montre exactement ce qui sera retiré (lignes `−` en rouge, entrées inchangées repliées). Dans ces captures, le nom d'utilisateur Windows est masqué (`dev`).
+
 ## Fonctionnalités
 
 - 🧹 **Nettoyage intelligent** : détection des **orphelins** (dossiers qui n'existent plus) et des **doublons**, dans le PATH Utilisateur (HKCU) et Système (HKLM). Les entrées dont l'absence n'est pas certaine (variable non résolue, chemin réseau) sont épargnées.
