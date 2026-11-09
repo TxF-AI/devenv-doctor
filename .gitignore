@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sauvegardes locales du PATH (chemins personnels)
+backups/

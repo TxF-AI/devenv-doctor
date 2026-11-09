@@ -14,7 +14,7 @@ Gestionnaire de paquets : **npm** (pnpm non installé). Frontend : Vite 7 + Vani
 - Tests Rust : `cd src-tauri && cargo test`
 - Lint Rust : `cd src-tauri && cargo clippy` (non encore lancé) ; format : `cargo fmt`
 - Rust installé via winget `Rustlang.Rustup` (stable MSVC). Dans un shell déjà ouvert, `cargo` n'est pas dans le PATH : `$env:Path += ";$env:USERPROFILE\.cargo\bin"`.
-- Backend : `src-tauri/src/lib.rs`. Crate : `devenv_doctor_lib`, dépendance `winreg` 0.56. Commande `get_registry_paths` (lecture seule) → `RegistryPathReport { user, system }` ; logique pure et testée : `expand_env`, `decode_reg_string`, `analyze_registry_path` (existence et lecture réelle injectées).
+- Backend : `src-tauri/src/lib.rs` (lecture : `get_registry_paths`) et `src-tauri/src/actions.rs` (écriture : `create_registry_backup`, `restore_registry_backup`, `list_backups`, `preview_cleanup`, `remove_orphans`, `deduplicate_paths`, `is_admin`). Crate `devenv_doctor_lib`, dépendances `winreg` 0.56 et `chrono`. Sauvegardes dans `%APPDATA%m.txfai.devenvdoctorbackups`.
 
 ## Conventions de Code & Git
 - Commits conventionnels (`feat:`, `fix:`, `docs:`, `refactor:`).
@@ -44,6 +44,21 @@ Format d'une entrée :
 - **Problème / Erreur :** une valeur `Path` peut être `REG_SZ` (les `%VAR%` ne sont PAS développées par Windows) ou `REG_EXPAND_SZ` (développées). Développer un REG_SZ afficherait un chemin que Windows n'utilise pas.
 - **Solution retenue :** `key.get_raw_value("Path")` pour avoir `vtype` ; développement seulement si `vtype == REG_EXPAND_SZ` ; décodage UTF-16 LE et retrait du NUL final (`decode_reg_string`). Les deux Path de cette machine sont en REG_EXPAND_SZ.
 - **Règle à appliquer :** ne jamais utiliser `get_value::<String>` (perd le type). Une variable `%X%` inconnue reste littérale (comme `ExpandEnvironmentStrings`). Test d'existence sur le chemin développé, sans guillemets. Ordre Windows : Système puis Utilisateur ; les doublons sont comptés entre scopes, la 1re occurrence (Système) gagne. Écriture future dans HKLM : droits admin requis ; garder REG_EXPAND_SZ à l'écriture pour ne pas casser les `%VAR%`.
+
+### Écriture Registre : KEY_SET_VALUE, droits admin, garde-fous
+- **Problème / Erreur :** écrire dans HKLM sans élévation échoue (`ERROR_ACCESS_DENIED`, code 5 / `PermissionDenied`) ; `open_subkey` (KEY_READ) réussit toujours, donc ne prouve rien sur le droit d'écrire.
+- **Solution retenue :** `open_subkey_with_flags(key, KEY_SET_VALUE)` : s'il réussit, on peut écrire (`can_write`, utilisé aussi par `is_admin`). Écriture via `set_raw_value("Path", &RegValue { bytes: Cow::Owned(encode_reg_string(..)), vtype })` en reprenant le type d'origine. Erreur de droits HKLM renvoyée avec le préfixe stable `AdminRequired: ...` (l'UI teste `startsWith("AdminRequired")`).
+- **Règle à appliquer :** vérifier les droits de TOUS les scopes à modifier AVANT la 1re écriture (pas de modification partielle) ; sauvegarde JSON automatique avant toute écriture ; refuser un PATH vide ou un type autre que REG_SZ/REG_EXPAND_SZ ; ne jamais écrire en `REG_SZ` ce qui était `REG_EXPAND_SZ` (les `%VAR%` cesseraient d'être développées). Ne jamais écrire dans le vrai Registre depuis un test : clé jetable `HKCU\Software\DevEnvDoctorTest-<pid>` supprimée à la fin. La validation « UI » n'écrit pas non plus : comparer l'empreinte des deux Path avant/après.
+
+### Orphelins : ce qu'on n'ose pas supprimer
+- **Problème / Erreur :** « dossier introuvable » ne prouve pas l'inutilité : variable `%X%` non résolue dans ce processus, chemin réseau `\\srv\...` injoignable, lecteur amovible absent.
+- **Solution retenue :** `is_safe_orphan` : n'est ciblé que ce dont l'expansion ne contient plus `%` et n'est pas un chemin UNC ; le reste est compté dans `skipped_unsafe` et signalé dans la modale.
+- **Règle à appliquer :** rester prudent sur la suppression ; le dédoublonnage compare Système puis Utilisateur (1re occurrence gardée), les cibles sont identifiées par INDEX (deux entrées au texte identique ne doivent pas partir ensemble).
+
+### Sauvegardes : où, et comment les relire
+- **Problème / Erreur :** un dossier `backups/` relatif écrit dans `src-tauri/` en dev, ce que `tauri dev` surveille (rebuild en boucle) ; un nom de fichier venant de l'UI peut sortir du dossier (`..\..`).
+- **Solution retenue :** dossier `%APPDATA%\com.txfai.devenvdoctor\backups\` (`app.path().app_data_dir()`, via `tauri::Manager`) ; la restauration ne prend que le NOM de fichier (`.json`, `file_name()`), valide la version et les types, et sauvegarde l'état courant avant d'écrire.
+- **Règle à appliquer :** jamais de chemin d'UI suivi tel quel ; arguments Tauri : `backup_file` côté Rust = `backupFile` côté JS ; commandes lourdes en `async`.
 
 ### winreg 0.56 : type des clés racine
 - **Problème / Erreur :** `error[E0308]: mismatched types` en passant `HKEY_LOCAL_MACHINE` à une fonction typée `isize`.

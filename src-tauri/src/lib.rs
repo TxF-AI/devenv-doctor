@@ -1,3 +1,5 @@
+mod actions;
+
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
@@ -168,14 +170,23 @@ fn build_report() -> RegistryPathReport {
 
 /// Lecture seule : PATH Utilisateur (HKCU) et Système (HKLM) depuis le Registre.
 #[tauri::command]
-fn get_registry_paths() -> RegistryPathReport {
+async fn get_registry_paths() -> RegistryPathReport {
     build_report()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_registry_paths])
+        .invoke_handler(tauri::generate_handler![
+            get_registry_paths,
+            actions::is_admin,
+            actions::create_registry_backup,
+            actions::restore_registry_backup,
+            actions::list_backups,
+            actions::preview_cleanup,
+            actions::remove_orphans,
+            actions::deduplicate_paths
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
