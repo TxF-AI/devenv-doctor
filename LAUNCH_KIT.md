@@ -17,7 +17,7 @@ Textes prêts à publier. Avant de poster : relire, adapter le ton, joindre **`a
 **Média :** joindre `assets/demo.gif` (upload natif Reddit, ou lien image : https://github.com/TxF-AI/devenv-doctor/raw/main/assets/demo.gif).
 
 **Titre (au choix)**
-- `I was tired of a 6000-character PATH full of dead folders, so I wrote a small Rust/Tauri tool to clean it safely`
+- `I was tired of a PATH full of dead folders and duplicates, so I wrote a small Rust/Tauri tool to clean it safely`
 - `My Windows PATH was a mess after years of Python/Node/Java installs — so I built DevEnv Doctor (Rust + Tauri v2, 4.5 MB)`
 
 **Corps**
@@ -84,16 +84,15 @@ I'd love feedback on edge cases and on which safety guarantees you'd want before
 **X (≤ 280 caractères, version courte)**
 
 ```
-My Windows PATH was 6000 chars of dead folders and shadowed binaries 😅
+My Windows PATH was a graveyard of dead folders and shadowed binaries 😅
 
 So I built DevEnv Doctor 🩺 (Rust + Tauri v2, 4.5 MB):
-🧹 orphans & duplicates
+🧹 orphans & dupes
 ⚠️ version conflicts
-📏 PATH compressor
-🛡️ diff preview + auto backup
+🛡️ diff preview + backup
 
 MIT 👉 github.com/TxF-AI/devenv-doctor
-#RustLang #Tauri #BuildInPublic #OpenSource
+#RustLang #Tauri #OpenSource
 ```
 
 **X (thread, 2ᵉ tweet)**
