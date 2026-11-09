@@ -1,6 +1,6 @@
 [package]
 name = "devenv-doctor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Nettoyeur de %PATH% Windows"
 authors = ["TxF-AI"]
 edition = "2024"

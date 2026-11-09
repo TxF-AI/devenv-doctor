@@ -4,8 +4,16 @@
 - **Projet :** DevEnv Doctor (Nettoyeur de %PATH% Windows, Profils Dev & Backup GitHub).
 - **Stack cible :** Rust (Backend) + Tauri v2 + Web Dark Mode / Cyberpunk (Frontend).
 - **Périmètre :** Manipulation sécurisée du Registre Windows (`HKCU\Environment` et `HKLM\SYSTEM\...`).
+- **Version courante :** v0.2.0 (dépôt public https://github.com/TxF-AI/devenv-doctor). La version affichée par l'app vient de `src-tauri/tauri.conf.json` : la garder égale à `Cargo.toml` et `package.json`.
 
-## Commandes clés (À compléter au fil de l'initialisation)
+### Fonctionnalités (v0.2.0)
+- **Analyse (lecture seule) :** PATH Utilisateur (HKCU) et Système (HKLM) lus dans le Registre, `%VAR%` développées selon REG_SZ / REG_EXPAND_SZ ; statuts Valide / Orphelin / Doublon ; tableau dense avec recherche, filtres état et scope (Ctrl+F) ; longueur de chaque PATH avec risque (seuils 1024 / 2048 / 8192) ; conflits de binaires de même nom.
+- **Nettoyage (écriture) :** suppression des orphelins sûrs, dédoublonnage, compression (`%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, `%windir%`, seulement si plus court), réordonnancement ⬆⬇ dans un scope. Toujours : aperçu, modale « diff », sauvegarde automatique, droits vérifiés avant d'écrire (`AdminRequired` pour HKLM), puis `WM_SETTINGCHANGE`.
+- **Sauvegardes :** JSON horodaté dans `%APPDATA%\com.txfai.devenvdoctor\backups\`, restauration en un clic avec aperçu en diff (variables touchées comprises).
+- **Profils & Dotfiles :** export/import JSON (sans secrets ni nom d'utilisateur), presets `Minimal Clean` / `WebDev` / `GameDev`, application limitée à HKCU ; export `setup-env.ps1` (PC vierge, `-WhatIf`, sans droits admin).
+- **Interface :** thème « HUD / dev tool » (obsidienne, accents réservés aux statuts), icônes SVG inline, LED `WM_SETTINGCHANGE` dans le pied de page.
+
+## Commandes clés
 Gestionnaire de paquets : **npm** (pnpm non installé). Frontend : Vite 7 + Vanilla JS + Tailwind 4 (`@tailwindcss/vite`, Dark Mode), port fixe 1420.
 - Installer : `npm install`
 - Dev (fenêtre Tauri + Vite) : `npm run tauri dev` (1re compilation Rust longue)
@@ -14,11 +22,12 @@ Gestionnaire de paquets : **npm** (pnpm non installé). Frontend : Vite 7 + Vani
 - Tests Rust : `cd src-tauri && cargo test`
 - Lint Rust : `cd src-tauri && cargo clippy --all-targets` (propre : 0 avertissement) ; format : `cargo fmt`
 - Rust installé via winget `Rustlang.Rustup` (stable MSVC). Dans un shell déjà ouvert, `cargo` n'est pas dans le PATH : `$env:Path += ";$env:USERPROFILE\.cargo\bin"`.
-- Backend : `src-tauri/src/lib.rs` (lecture : `get_registry_paths`), `src-tauri/src/actions.rs` (écriture : `create_registry_backup`, `restore_registry_backup`, `preview_restore`, `list_backups`, `preview_cleanup`, `remove_orphans`, `deduplicate_paths`, `is_admin`, diffusion `WM_SETTINGCHANGE`) `src-tauri/src/profiles.rs` (`list_presets`, `export_profile`, `import_profile`, `preview_profile`, `apply_profile`, `export_powershell`) et `src-tauri/src/optimize.rs` (`get_path_lengths`, `preview_compress`, `compress_path`, `move_path_entry`, `analyze_conflicts`). Crate `devenv_doctor_lib` ; dépendances `winreg` 0.56, `chrono`, `windows-sys` (Win32_Foundation, Win32_UI_WindowsAndMessaging). Sauvegardes : `%APPDATA%\com.txfai.devenvdoctor\backups\` ; exports de profils : `%APPDATA%\com.txfai.devenvdoctor\profiles\<nom>.json` (JSON uniquement, pas de YAML).
+- Backend : `src-tauri/src/lib.rs` (lecture : `get_registry_paths`), `src-tauri/src/actions.rs` (écriture : `create_registry_backup`, `restore_registry_backup`, `preview_restore`, `list_backups`, `preview_cleanup`, `remove_orphans`, `deduplicate_paths`, `is_admin`, diffusion `WM_SETTINGCHANGE`), `src-tauri/src/profiles.rs` (`list_presets`, `export_profile`, `import_profile`, `preview_profile`, `apply_profile`, `export_powershell`) et `src-tauri/src/optimize.rs` (`get_path_lengths`, `preview_compress`, `compress_path`, `move_path_entry`, `analyze_conflicts`). Crate `devenv_doctor_lib` ; dépendances `winreg` 0.56, `chrono`, `windows-sys` (Win32_Foundation, Win32_UI_WindowsAndMessaging). Sauvegardes : `%APPDATA%\com.txfai.devenvdoctor\backups\` ; exports de profils : `%APPDATA%\com.txfai.devenvdoctor\profiles\<nom>.json` (JSON uniquement, pas de YAML).
 
 ## Conventions de Code & Git
 - Commits conventionnels (`feat:`, `fix:`, `docs:`, `refactor:`).
 - Auteur Git : `TxF-AI <206823544+TxF-AI@users.noreply.github.com>`.
+- Publication : `gh` (authentifié en `TxF-AI`) ; dépôt public `TxF-AI/devenv-doctor`, branche `main`. Ordre d'une release : mettre à jour la version (3 fichiers) → `cargo test` + `cargo clippy --all-targets` → commit → build release → tag annoté `vX.Y.Z` → `git push origin main` puis `git push origin <tag>`. Aucune donnée personnelle dans les fichiers suivis (vérifier avec `git grep -i -E "$env:USERNAME|gmail"`).
 
 ## Registre des Erreurs & Leçons Apprises (Memory Log)
 *Mise à jour obligatoire : À chaque commande échouée, bug complexe (> 2 essais) ou comportement inattendu Windows/Rust/Tauri, consigner ici le problème, la solution et la règle stricte à suivre pour éviter de consommer des tokens inutilement.*
@@ -37,7 +46,7 @@ Format d'une entrée :
 
 ### Le PATH lu par l'app n'est pas le PATH de l'utilisateur
 - **Problème / Erreur :** en `tauri dev`, `std::env::var("PATH")` contient des entrées ajoutées par cargo/npm (`target\debug\deps`, `node_modules\.bin` de chaque dossier parent, rustlib) : orphelins et entrées parasites dans la liste.
-- **Solution retenue :** aucune pour l'instant (constat ; l'affichage de démo reflète le PATH du *processus*).
+- **Solution retenue :** résolu depuis v0.1.x : `get_registry_paths` lit le Registre (`read_path_value`), plus jamais l'environnement du processus.
 - **Règle à appliquer :** pour une vraie analyse, lire le Registre (`HKCU\Environment\Path` et `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment\Path`, valeurs `REG_EXPAND_SZ` à développer) et non l'environnement du processus. Ne jamais déduire un état système du PATH d'un process lancé par un outil de dev.
 
 ### Registre : REG_SZ vs REG_EXPAND_SZ, types winreg
@@ -104,6 +113,11 @@ Format d'une entrée :
 - **Problème / Erreur :** `perl -0pi -e 's/.../.../s'` avec du code Rust contenant `/`, `"`, `'` dans le shell → « Unknown regexp modifier », test non ajouté.
 - **Solution retenue :** écrire le bloc dans un fichier (Write) puis l'insérer avec `T=fichier perl -0pi -e 'BEGIN{open F,"<",$ENV{T}; local $/; $t=<F>} s/\n\}\s*\z/\n\n$t}\n/s'`.
 - **Règle à appliquer :** jamais de code multi-lignes dans un `-e` ; préférer Edit (ancre unique) ou l'insertion depuis un fichier.
+
+### Release : cohérence de version et fichiers de test
+- **Problème / Erreur :** un tag `v0.2.0` sur des manifestes encore en `0.1.0` : l'exécutable aurait affiché `v0.1.0` (la version de l'UI vient de `tauri.conf.json` via `app.getVersion()`).
+- **Solution retenue :** `npm version X.Y.Z --no-git-tag-version` (met à jour `package.json` et `package-lock.json`) + `sed '0,/^version = "A"/s//version = "X.Y.Z"/'` sur `Cargo.toml` + même remplacement dans `tauri.conf.json` ; `Cargo.lock` suit au prochain `cargo test` ; commit `chore(release)` AVANT le build, tag APRÈS le build.
+- **Règle à appliquer :** le binaire doit être construit à partir du commit qui porte le tag ; nettoyer `%APPDATA%\com.txfai.devenvdoctor\` (sauvegardes et exports de test) avant de rendre la main, mais seulement après avoir comparé l'empreinte du Registre à l'état d'origine.
 
 ### Clippy 1.99 : chunks_exact(2)
 - **Problème / Erreur :** `clippy::chunks_exact_to_as_chunks` sur `bytes.chunks_exact(2)`.
