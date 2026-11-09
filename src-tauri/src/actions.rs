@@ -499,6 +499,72 @@ pub async fn restore_registry_backup(app: tauri::AppHandle, backup_file: String)
     Ok(broadcast_environment_change())
 }
 
+#[derive(Serialize, Debug, PartialEq)]
+pub struct VarDiff {
+    pub name: String,
+    pub current: Option<String>,
+    pub backup: Option<String>,
+}
+
+/// Ce que changerait la restauration d'une sauvegarde (rien n'est écrit).
+#[derive(Serialize, Debug, PartialEq)]
+pub struct RestorePreview {
+    pub created_at: String,
+    pub reason: String,
+    /// `Some` seulement si la restauration modifierait ce scope.
+    pub user: Option<ScopeDiff>,
+    pub system: Option<ScopeDiff>,
+    pub variables: Vec<VarDiff>,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct ScopeDiff {
+    pub current: Vec<String>,
+    pub backup: Vec<String>,
+}
+
+fn split_entries(raw: &str) -> Vec<String> {
+    raw.split(';').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
+}
+
+/// Même logique de décision que `restore_registry_backup`, sans écrire.
+pub fn build_restore_preview(b: &Backup, current: &Backup) -> RestorePreview {
+    let diff = |new: &Option<ScopeBackup>, old: &Option<ScopeBackup>| match (new, old) {
+        (Some(n), o) if Some(n) != o.as_ref() => Some(ScopeDiff {
+            current: o.as_ref().map(|s| split_entries(&s.raw)).unwrap_or_default(),
+            backup: split_entries(&n.raw),
+        }),
+        _ => None,
+    };
+    let variables = b
+        .touched_variables
+        .iter()
+        .filter(|(n, old)| current.touched_variables.get(*n) != Some(*old))
+        .map(|(n, old)| VarDiff {
+            name: n.clone(),
+            current: current.touched_variables.get(n).and_then(|v| v.as_ref()).map(|s| s.raw.clone()),
+            backup: old.as_ref().map(|s| s.raw.clone()),
+        })
+        .collect();
+    RestorePreview {
+        created_at: b.created_at.clone(),
+        reason: b.reason.clone(),
+        user: diff(&b.user, &current.user),
+        system: diff(&b.system, &current.system),
+        variables,
+    }
+}
+
+/// Aperçu (lecture seule) d'une restauration, pour la modale « diff ».
+#[tauri::command]
+pub async fn preview_restore(app: tauri::AppHandle, backup_file: String) -> Result<RestorePreview, String> {
+    let dir = backups_dir(&app)?;
+    let b = load_backup(&resolve_backup_file(&dir, &backup_file)?)?;
+    let names: Vec<String> = b.touched_variables.keys().cloned().collect();
+    let current = snapshot_with_vars("aperçu", &names)?;
+    Ok(build_restore_preview(&b, &current))
+}
+
 /// Les 10 sauvegardes les plus récentes.
 #[tauri::command]
 pub async fn list_backups(app: tauri::AppHandle) -> Result<Vec<BackupInfo>, String> {
@@ -714,5 +780,25 @@ mod tests {
         assert!(validate_backup(&b2).is_ok());
         b2.touched_variables.insert("MAUVAISE".into(), Some(ScopeBackup { value_type: "REG_DWORD".into(), raw: "1".into() }));
         assert!(validate_backup(&b2).is_err());
+    }
+
+    #[test]
+    fn apercu_de_restauration_ne_liste_que_ce_qui_change() {
+        let sb = |raw: &str| Some(ScopeBackup { value_type: "REG_EXPAND_SZ".into(), raw: raw.into() });
+        let mk = |u: Option<ScopeBackup>, s: Option<ScopeBackup>, v: &[(&str, Option<&str>)]| Backup {
+            version: 1, created_at: "t".into(), reason: "r".into(), user: u, system: s,
+            touched_variables: v.iter().map(|(n, x)| (n.to_string(), x.map(|r| ScopeBackup { value_type: "REG_SZ".into(), raw: r.into() }))).collect(),
+        };
+        let backup = mk(sb(r"C:;C:"), sb(r"C:s"), &[("X", Some("old")), ("Y", None), ("Z", Some("same"))]);
+        let current = mk(sb(r"C:"), sb(r"C:s"), &[("X", Some("new")), ("Y", Some("created")), ("Z", Some("same"))]);
+        let p = build_restore_preview(&backup, &current);
+        let u = p.user.unwrap();
+        assert_eq!((u.current, u.backup), (vec![r"C:".to_string()], vec![r"C:".to_string(), r"C:".to_string()]));
+        assert!(p.system.is_none()); // identique : rien à restaurer
+        let names: Vec<&str> = p.variables.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, vec!["X", "Y"]);
+        assert_eq!(p.variables[1].backup, None); // Y n'existait pas : sera supprimée
+        // Valeur absente dans la sauvegarde : le scope n'est jamais touché.
+        assert!(build_restore_preview(&mk(None, None, &[]), &current).user.is_none());
     }
 }

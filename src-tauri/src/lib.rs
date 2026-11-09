@@ -186,6 +186,7 @@ pub fn run() {
             actions::create_registry_backup,
             actions::restore_registry_backup,
             actions::list_backups,
+            actions::preview_restore,
             actions::preview_cleanup,
             actions::remove_orphans,
             actions::deduplicate_paths,

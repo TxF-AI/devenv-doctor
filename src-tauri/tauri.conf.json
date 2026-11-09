@@ -14,8 +14,11 @@
     "windows": [
       {
         "title": "DevEnv Doctor",
-        "width": 900,
-        "height": 650
+        "width": 1000,
+        "height": 720,
+        "minWidth": 780,
+        "minHeight": 520,
+        "theme": "Dark"
       }
     ],
     "security": {
