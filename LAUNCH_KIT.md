@@ -1,6 +1,6 @@
 # LAUNCH_KIT — DevEnv Doctor v0.2.0
 
-Textes prêts à publier. Avant de poster : relire, adapter le ton, joindre un GIF ou une capture (`assets/ui-preview.png`, `assets/ui-diff.png`) et **respecter les règles d'auto-promotion de chaque communauté** (flair « Show & Tell » / « Project », pas de spam multi-posts le même jour, répondre aux commentaires).
+Textes prêts à publier. Avant de poster : relire, adapter le ton, joindre **`assets/demo.gif`** (1,8 Mo, ~8 s : média principal de toutes les publications) ou, à défaut, une capture (`assets/ui-preview.png`, `assets/ui-diff.png`) et **respecter les règles d'auto-promotion de chaque communauté** (flair « Show & Tell » / « Project », pas de spam multi-posts le même jour, répondre aux commentaires).
 
 - Repo : https://github.com/TxF-AI/devenv-doctor
 - Release : https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.2.0 (`devenv-doctor.exe`, 4,5 Mo)
@@ -13,6 +13,8 @@ Textes prêts à publier. Avant de poster : relire, adapter le ton, joindre un G
 ## 1. Reddit — Show & Tell
 
 **Subreddits :** `r/rust` (flair *project*), `r/windows`, `r/programming` (lien vers le repo, pas de texte promo), `r/CoolGithubProjects`. Un subreddit par jour, adapter l'intro.
+
+**Média :** joindre `assets/demo.gif` (upload natif Reddit, ou lien image : https://github.com/TxF-AI/devenv-doctor/raw/main/assets/demo.gif).
 
 **Titre (au choix)**
 - `I was tired of a 6000-character PATH full of dead folders, so I wrote a small Rust/Tauri tool to clean it safely`
@@ -51,6 +53,8 @@ It's v0.2.0 and I'd really like **feedback**: edge cases in your PATH that confu
 
 **URL :** https://github.com/TxF-AI/devenv-doctor
 
+**Média :** HN n'héberge pas d'images : `assets/demo.gif` s'affiche en tête de la section « Aperçu » du README du dépôt. Ajouter dans le premier commentaire : `Demo (8 s): https://github.com/TxF-AI/devenv-doctor/raw/main/assets/demo.gif`
+
 **Premier commentaire (à poster juste après la soumission)**
 
 Hi HN, author here.
@@ -75,7 +79,7 @@ I'd love feedback on edge cases and on which safety guarantees you'd want before
 
 ## 3. X (Twitter) & LinkedIn
 
-**Média à joindre :** GIF de 10–15 s : ouvrir l'app → filtre « Orphelin » → « Orphelins » → modale diff → confirmer → bouton Restaurer. Ou à défaut `assets/ui-preview.png` + `assets/ui-diff.png`.
+**Média à joindre :** `assets/demo.gif` (X : GIF natif ; LinkedIn : ajouter comme image/GIF au post, 1er commentaire = lien du repo). En secours : `assets/ui-preview.png` + `assets/ui-diff.png`.
 
 **X (≤ 280 caractères, version courte)**
 
@@ -132,6 +136,8 @@ github.com/TxF-AI/devenv-doctor — feedback very welcome!
 ## 4. Discord — #showcase
 
 **Salons :** Discord officiel Tauri (`#showcase`), DevFR (salon projets), serveurs Rust FR/EN. Lire les règles du salon avant de poster.
+
+**Média :** joindre `assets/demo.gif` directement dans le message (limite Discord largement respectée).
 
 **Message (EN)**
 ```

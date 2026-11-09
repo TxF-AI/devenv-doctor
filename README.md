@@ -14,6 +14,13 @@ Application de bureau native (Rust + Tauri v2), un seul exécutable de moins de 
 
 ## 🎨 Aperçu de l'Interface
 
+![Démonstration Animée](assets/demo.gif)
+
+*Démo animée (données fictives) : suppression des doublons avec aperçu « diff », puis compression du PATH (−59 caractères).*
+
+<details>
+<summary>Captures statiques</summary>
+
 <p align="center">
   <img src="assets/ui-preview.png" alt="DevEnv Doctor : tableau du PATH avec jauges de longueur, filtres et badges" width="900">
 </p>
@@ -25,6 +32,8 @@ Interface **HUD cyberpunk compacte**, pensée comme un outil de développeur : f
 </p>
 
 Avant toute écriture, une **modale de confirmation en mode « diff Git »** montre exactement ce qui sera retiré (lignes `−` en rouge, entrées inchangées repliées). Dans ces captures, le nom d'utilisateur Windows est masqué (`dev`).
+
+</details>
 
 ## Fonctionnalités
 
