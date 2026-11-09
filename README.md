@@ -1,5 +1,7 @@
 # DevEnv Doctor (v0.2.0)
 
+🇬🇧 [English version](README.en.md)
+
 [![Latest Release](https://img.shields.io/github/v/release/TxF-AI/devenv-doctor?label=Latest%20Release&color=00e5ff)](https://github.com/TxF-AI/devenv-doctor/releases/latest)
 ![Size](https://img.shields.io/badge/Size-4.5%20MB-1e2230)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078d4)
