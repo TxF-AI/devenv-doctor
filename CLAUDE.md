@@ -27,7 +27,7 @@ Gestionnaire de paquets : **npm** (pnpm non installé). Frontend : Vite 7 + Vani
 ## Conventions de Code & Git
 - Commits conventionnels (`feat:`, `fix:`, `docs:`, `refactor:`).
 - Auteur Git : `TxF-AI <206823544+TxF-AI@users.noreply.github.com>`.
-- Publication : `gh` (authentifié en `TxF-AI`) ; dépôt public `TxF-AI/devenv-doctor`, branche `main`. Ordre d'une release : mettre à jour la version (3 fichiers) → `cargo test` + `cargo clippy --all-targets` → commit → build release → tag annoté `vX.Y.Z` → `git push origin main` puis `git push origin <tag>`. Aucune donnée personnelle dans les fichiers suivis (vérifier avec `git grep -i -E "$env:USERNAME|gmail"`).
+- Publication : `gh` (authentifié en `TxF-AI`) ; dépôt public `TxF-AI/devenv-doctor`, branche `main`. Ordre d'une release : mettre à jour la version (3 fichiers) → `cargo test` + `cargo clippy --all-targets` → commit → build release → tag annoté `vX.Y.Z` → `git push origin main` puis `git push origin <tag>` → `gh release create vX.Y.Z <exe> --verify-tag --notes-file <fichier hors dépôt ou supprimé après>` avec le SHA-256 dans les notes → mettre à jour `README.md` (titre, badges, taille, lien direct, SHA-256). Aucune donnée personnelle dans les fichiers suivis (vérifier avec `git grep -i -E "$env:USERNAME|gmail"`).
 
 ## Registre des Erreurs & Leçons Apprises (Memory Log)
 *Mise à jour obligatoire : À chaque commande échouée, bug complexe (> 2 essais) ou comportement inattendu Windows/Rust/Tauri, consigner ici le problème, la solution et la règle stricte à suivre pour éviter de consommer des tokens inutilement.*
