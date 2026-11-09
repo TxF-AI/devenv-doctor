@@ -4,6 +4,7 @@
 ![Size](https://img.shields.io/badge/Size-4.5%20MB-1e2230)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078d4)
 ![Tech Stack](https://img.shields.io/badge/Tech%20Stack-Rust%20%2B%20Tauri%20v2-f74c00)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Gestionnaire et nettoyeur intelligent du `PATH` Windows et des variables d'environnement.**
 
@@ -89,3 +90,7 @@ Sans `--no-bundle`, Tauri télécharge WiX et NSIS pour produire des installateu
 | `src-tauri/src/profiles.rs` | profils, presets, export JSON et script PowerShell |
 | `src/`, `index.html` | interface (JavaScript, Vite, Tailwind) |
 | `CLAUDE.md` | mémoire du projet : commandes, conventions et leçons apprises |
+
+## 📜 Licence
+
+Ce projet est distribué sous licence **MIT** : tu peux l'utiliser, le copier, le modifier et le redistribuer librement, à condition de conserver la mention de copyright. Le texte complet est dans le fichier [LICENSE](LICENSE). Copyright (c) 2026 TxF-AI.
