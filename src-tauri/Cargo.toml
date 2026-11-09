@@ -3,6 +3,7 @@ name = "devenv-doctor"
 version = "0.2.0"
 description = "Nettoyeur de %PATH% Windows"
 authors = ["TxF-AI"]
+license = "MIT"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
