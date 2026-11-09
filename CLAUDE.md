@@ -10,11 +10,11 @@ Gestionnaire de paquets : **npm** (pnpm non installé). Frontend : Vite 7 + Vani
 - Installer : `npm install`
 - Dev (fenêtre Tauri + Vite) : `npm run tauri dev` (1re compilation Rust longue)
 - Build frontend seul : `npm run build` → `dist/`
-- Build de l'app : `npm run tauri build`
+- Build de l'exécutable final : `npm run tauri build -- --no-bundle` → `src-tauri\target\release\devenv-doctor.exe` (sans installateur). Sans `--no-bundle`, `targets: "all"` télécharge WiX/NSIS pour produire MSI/setup : à ne lancer qu'en connaissance de cause. Build release long (LTO).
 - Tests Rust : `cd src-tauri && cargo test`
-- Lint Rust : `cd src-tauri && cargo clippy` (non encore lancé) ; format : `cargo fmt`
+- Lint Rust : `cd src-tauri && cargo clippy --all-targets` (propre : 0 avertissement) ; format : `cargo fmt`
 - Rust installé via winget `Rustlang.Rustup` (stable MSVC). Dans un shell déjà ouvert, `cargo` n'est pas dans le PATH : `$env:Path += ";$env:USERPROFILE\.cargo\bin"`.
-- Backend : `src-tauri/src/lib.rs` (lecture : `get_registry_paths`) et `src-tauri/src/actions.rs` (écriture : `create_registry_backup`, `restore_registry_backup`, `list_backups`, `preview_cleanup`, `remove_orphans`, `deduplicate_paths`, `is_admin`). Crate `devenv_doctor_lib`, dépendances `winreg` 0.56 et `chrono`. Sauvegardes dans `%APPDATA%m.txfai.devenvdoctorbackups`.
+- Backend : `src-tauri/src/lib.rs` (lecture : `get_registry_paths`), `src-tauri/src/actions.rs` (écriture : `create_registry_backup`, `restore_registry_backup`, `list_backups`, `preview_cleanup`, `remove_orphans`, `deduplicate_paths`, `is_admin`, diffusion `WM_SETTINGCHANGE`) et `src-tauri/src/profiles.rs` (`list_presets`, `export_profile`, `import_profile`, `preview_profile`, `apply_profile`). Crate `devenv_doctor_lib` ; dépendances `winreg` 0.56, `chrono`, `windows-sys` (Win32_Foundation, Win32_UI_WindowsAndMessaging). Sauvegardes : `%APPDATA%\com.txfai.devenvdoctor\backups\` ; exports de profils : `%APPDATA%\com.txfai.devenvdoctor\profiles\<nom>.json` (JSON uniquement, pas de YAML).
 
 ## Conventions de Code & Git
 - Commits conventionnels (`feat:`, `fix:`, `docs:`, `refactor:`).
@@ -59,6 +59,26 @@ Format d'une entrée :
 - **Problème / Erreur :** un dossier `backups/` relatif écrit dans `src-tauri/` en dev, ce que `tauri dev` surveille (rebuild en boucle) ; un nom de fichier venant de l'UI peut sortir du dossier (`..\..`).
 - **Solution retenue :** dossier `%APPDATA%\com.txfai.devenvdoctor\backups\` (`app.path().app_data_dir()`, via `tauri::Manager`) ; la restauration ne prend que le NOM de fichier (`.json`, `file_name()`), valide la version et les types, et sauvegarde l'état courant avant d'écrire.
 - **Règle à appliquer :** jamais de chemin d'UI suivi tel quel ; arguments Tauri : `backup_file` côté Rust = `backupFile` côté JS ; commandes lourdes en `async`.
+
+### WM_SETTINGCHANGE : prévenir Windows après une écriture
+- **Problème / Erreur :** modifier le Registre ne suffit pas : l'explorateur et les nouveaux terminaux gardent l'ancien environnement jusqu'au redémarrage de session.
+- **Solution retenue :** `SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, "Environment" UTF-16 terminé par NUL, SMTO_ABORTIFHUNG, 3000, &mut res)` (`windows-sys` 0.61, features `Win32_Foundation` + `Win32_UI_WindowsAndMessaging`), appelé seulement APRÈS une écriture réussie. Retour 0 = délai dépassé/échec : ce n'est PAS une erreur d'écriture, l'UI affiche un avertissement et demande de relancer les terminaux. Les processus déjà ouverts gardent leur copie de l'environnement dans tous les cas.
+- **Règle à appliquer :** jamais de diffusion si rien n'a été écrit ; le `LPARAM` doit pointer une chaîne qui vit pendant tout l'appel (appel synchrone) ; garder le bloc `unsafe` minimal et commenté.
+
+### Profils : un fichier importé est une entrée non fiable
+- **Problème / Erreur :** un profil JSON venu d'ailleurs pourrait réécrire `COMSPEC`/`PATHEXT`/`Path`, ou ajouter un dossier piégé ; un export naïf fuit tokens et nom d'utilisateur dans un dépôt dotfiles public.
+- **Solution retenue :** `validate_profile` (version, tailles, noms `[A-Za-z_][A-Za-z0-9_]*`, pas de `;`/NUL) ; liste `PROTECTED_VARS` ignorée à l'application ; seul HKCU est modifié (`path_system` informatif) ; aperçu + modale + sauvegarde auto, le plan est RECALCULÉ dans `apply_profile`. Export : noms contenant TOKEN/SECRET/PASS/KEY/CRED/AUTH/PRIVATE/SESSION/COOKIE exclus et listés ; `%USERPROFILE%` remplace le dossier de profil (insensible à la casse).
+- **Règle à appliquer :** ne jamais appliquer un aperçu périmé ; ne jamais faire confiance à un champ du fichier ; un « Replace » vide n'efface jamais le PATH (`path_user` vide = inchangé, résultat vide refusé). Les noms de variables non secrets peuvent rester personnels (ex. identifiants) : relire l'export avant de le publier.
+
+### Restauration des variables touchées par un profil
+- **Problème / Erreur :** la sauvegarde ne couvrait que `Path`, donc un profil qui ajoute des variables n'était pas annulable.
+- **Solution retenue :** champ `touched_variables` (`#[serde(default)]`, anciennes sauvegardes toujours lisibles) : ancienne valeur, ou `null` = n'existait pas → supprimée à la restauration. Seules les variables touchées sont revertées (pas de resynchronisation totale qui effacerait d'autres variables).
+- **Règle à appliquer :** toute nouvelle écriture hors `Path` doit enregistrer l'état précédent dans `touched_variables` AVANT d'écrire. Validation sans toucher à tes vrais réglages : profil jetable `DEVENV_DOCTOR_SELFTEST`, appliqué puis restauré, empreinte du Registre comparée avant/après.
+
+### Clippy 1.99 : chunks_exact(2)
+- **Problème / Erreur :** `clippy::chunks_exact_to_as_chunks` sur `bytes.chunks_exact(2)`.
+- **Solution retenue :** `bytes.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c))`.
+- **Règle à appliquer :** lancer `cargo clippy --all-targets` avant le commit ; `sed` avec `\c` dans le remplacement efface le backslash : éditer `CLAUDE.md` avec Edit, pas avec sed.
 
 ### winreg 0.56 : type des clés racine
 - **Problème / Erreur :** `error[E0308]: mismatched types` en passant `HKEY_LOCAL_MACHINE` à une fonction typée `isize`.

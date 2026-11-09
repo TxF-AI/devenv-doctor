@@ -1,4 +1,5 @@
 mod actions;
+mod profiles;
 
 use serde::Serialize;
 use std::collections::HashSet;
@@ -71,8 +72,10 @@ pub fn expand_env(s: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
 /// Décode les octets d'une valeur de Registre texte (UTF-16 LE, NUL final retiré).
 pub fn decode_reg_string(bytes: &[u8]) -> String {
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     String::from_utf16_lossy(&units)
         .trim_end_matches('\0')
@@ -185,7 +188,12 @@ pub fn run() {
             actions::list_backups,
             actions::preview_cleanup,
             actions::remove_orphans,
-            actions::deduplicate_paths
+            actions::deduplicate_paths,
+            profiles::list_presets,
+            profiles::export_profile,
+            profiles::import_profile,
+            profiles::preview_profile,
+            profiles::apply_profile
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,6 +7,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use winreg::enums::{
@@ -36,6 +37,10 @@ pub struct Backup {
     /// `None` : la valeur n'existait pas.
     pub user: Option<ScopeBackup>,
     pub system: Option<ScopeBackup>,
+    /// Variables utilisateur touchées par l'application d'un profil : valeur d'avant
+    /// (`None` = n'existait pas, à supprimer à la restauration). Absent des anciennes sauvegardes.
+    #[serde(default)]
+    pub touched_variables: BTreeMap<String, Option<ScopeBackup>>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -56,7 +61,11 @@ pub fn validate_backup(b: &Backup) -> Result<(), String> {
     if b.version != BACKUP_VERSION {
         return Err(format!("Version de sauvegarde non prise en charge : {}", b.version));
     }
-    for (name, s) in [("user", &b.user), ("system", &b.system)] {
+    let vars = b.touched_variables.iter().map(|(n, s)| (n.as_str(), s));
+    let scopes = [("user", &b.user), ("system", &b.system)]
+        .into_iter()
+        .chain(vars);
+    for (name, s) in scopes {
         if let Some(s) = s {
             if s.value_type != "REG_SZ" && s.value_type != "REG_EXPAND_SZ" {
                 return Err(format!("Type de valeur invalide pour {name} : {}", s.value_type));
@@ -82,19 +91,121 @@ pub fn join_path(parts: &[&str]) -> String {
 
 /// Photo de l'état actuel du Registre (texte brut + type), sans interprétation.
 fn snapshot(reason: &str) -> Result<Backup, String> {
+    snapshot_with_vars(reason, &[])
+}
+
+/// Comme `snapshot`, en gardant aussi la valeur actuelle des variables utilisateur `names`.
+pub(crate) fn snapshot_with_vars(reason: &str, names: &[String]) -> Result<Backup, String> {
     let read = |root: HKEY, key: &str| -> Result<Option<ScopeBackup>, String> {
         Ok(read_path_value(root, key)?.map(|(raw, _exp, ty)| ScopeBackup { value_type: ty, raw }))
     };
+    let current = if names.is_empty() { BTreeMap::new() } else { read_user_vars()? };
+    let touched_variables = names
+        .iter()
+        .map(|n| {
+            let old = current.iter().find(|(k, _)| k.eq_ignore_ascii_case(n)).map(|(_, v)| v.clone());
+            (n.clone(), old)
+        })
+        .collect();
     Ok(Backup {
         version: BACKUP_VERSION,
         created_at: chrono::Local::now().to_rfc3339(),
         reason: reason.to_string(),
         user: read(HKEY_CURRENT_USER, USER_KEY)?,
         system: read(HKEY_LOCAL_MACHINE, SYSTEM_KEY)?,
+        touched_variables,
     })
 }
 
-fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+// ───────── Variables d'environnement utilisateur (HKCU\Environment) ─────────
+
+/// Toutes les variables utilisateur texte (hors `Path`) : nom → sauvegarde (type + texte).
+pub(crate) fn read_user_vars() -> Result<BTreeMap<String, ScopeBackup>, String> {
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(USER_KEY, winreg::enums::KEY_READ)
+        .map_err(|e| e.to_string())?;
+    let mut out = BTreeMap::new();
+    for item in key.enum_values() {
+        let (name, v) = item.map_err(|e| e.to_string())?;
+        if name.eq_ignore_ascii_case("Path") || name.is_empty() {
+            continue;
+        }
+        let ty = match v.vtype {
+            REG_SZ => "REG_SZ",
+            REG_EXPAND_SZ => "REG_EXPAND_SZ",
+            _ => continue, // DWORD, binaire… : on n'y touche pas
+        };
+        out.insert(
+            name,
+            ScopeBackup { value_type: ty.to_string(), raw: crate::decode_reg_string(&v.bytes[..]) },
+        );
+    }
+    Ok(out)
+}
+
+fn vtype_of(value_type: &str) -> Result<winreg::enums::RegType, String> {
+    match value_type {
+        "REG_SZ" => Ok(REG_SZ),
+        "REG_EXPAND_SZ" => Ok(REG_EXPAND_SZ),
+        other => Err(format!("Type de valeur non pris en charge : {other}")),
+    }
+}
+
+/// Écrit (ou remplace) une variable utilisateur texte. Jamais `Path` (voir `write_path_value`).
+pub(crate) fn write_user_var(name: &str, raw: &str, value_type: &str) -> Result<(), String> {
+    if name.eq_ignore_ascii_case("Path") {
+        return Err("Path ne s'écrit qu'avec write_path_value".into());
+    }
+    let vtype = vtype_of(value_type)?;
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(USER_KEY, KEY_SET_VALUE)
+        .map_err(|e| format!("Ouverture de HKCU\\Environment impossible : {e}"))?;
+    key.set_raw_value(name, &RegValue { bytes: Cow::Owned(encode_reg_string(raw)), vtype })
+        .map_err(|e| format!("Écriture de {name} impossible : {e}"))
+}
+
+pub(crate) fn delete_user_var(name: &str) -> Result<(), String> {
+    if name.eq_ignore_ascii_case("Path") {
+        return Err("Suppression de Path refusée".into());
+    }
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(USER_KEY, KEY_SET_VALUE)
+        .map_err(|e| format!("Ouverture de HKCU\\Environment impossible : {e}"))?;
+    match key.delete_value(name) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("Suppression de {name} impossible : {e}")),
+        _ => Ok(()),
+    }
+}
+
+// ───────── Diffusion WM_SETTINGCHANGE ─────────
+
+/// Prévient Windows (explorateur, nouveaux terminaux…) que les variables
+/// d'environnement ont changé : `WM_SETTINGCHANGE` avec le paramètre « Environment ».
+/// `true` si la diffusion a abouti ; `false` (délai dépassé, fenêtre bloquée) n'est
+/// pas une erreur : la modification du Registre, elle, est bien faite.
+pub(crate) fn broadcast_environment_change() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
+    };
+    let param: Vec<u16> = "Environment".encode_utf16().chain(std::iter::once(0)).collect();
+    let mut result: usize = 0;
+    // SAFETY : `param` est une chaîne UTF-16 terminée par NUL qui vit pendant tout l'appel
+    // (SendMessageTimeoutW est synchrone) ; `result` est un pointeur valide.
+    let ret = unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            param.as_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            3000,
+            &mut result,
+        )
+    };
+    ret != 0
+}
+
+pub(crate) fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -104,7 +215,7 @@ fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn write_backup(dir: &Path, b: &Backup) -> Result<PathBuf, String> {
+pub(crate) fn write_backup(dir: &Path, b: &Backup) -> Result<PathBuf, String> {
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S-%3f");
     let file = dir.join(format!("path-backup-{stamp}.json"));
     let json = serde_json::to_string_pretty(b).map_err(|e| e.to_string())?;
@@ -142,7 +253,7 @@ pub fn admin_error(what: &str) -> String {
     format!("{ADMIN_REQUIRED}: {what} demande de lancer l'application en tant qu'administrateur.")
 }
 
-fn can_write(root: HKEY, subkey: &str) -> bool {
+pub(crate) fn can_write(root: HKEY, subkey: &str) -> bool {
     RegKey::predef(root).open_subkey_with_flags(subkey, KEY_SET_VALUE).is_ok()
 }
 
@@ -243,11 +354,13 @@ pub struct CleanupResult {
     pub skipped_unsafe: usize,
     /// Nom du fichier de sauvegarde créé avant l'écriture (None si rien à faire).
     pub backup_file: Option<String>,
+    /// WM_SETTINGCHANGE diffusé avec succès (false si rien n'a été écrit ou si la diffusion a expiré).
+    pub broadcast: bool,
 }
 
 /// Un orphelin n'est supprimé que si on est sûr de son absence : une variable
 /// non résolue (`%X%`) ou un chemin réseau injoignable n'est pas une preuve.
-fn is_safe_orphan(e: &PathEntry) -> bool {
+pub(crate) fn is_safe_orphan(e: &PathEntry) -> bool {
     !e.expanded_path.contains('%') && !e.expanded_path.trim_start().starts_with(r"\\")
 }
 
@@ -303,7 +416,7 @@ fn run_cleanup(dir: &Path, kind: Kind, sel: ScopeSel, reason: &str) -> Result<Cl
     }
     let (targets, skipped) = plan_cleanup(&report, kind, sel);
     if targets.is_empty() {
-        return Ok(CleanupResult { removed: vec![], skipped_unsafe: skipped, backup_file: None });
+        return Ok(CleanupResult { removed: vec![], skipped_unsafe: skipped, backup_file: None, broadcast: false });
     }
     let touches = |s: &str| targets.iter().any(|t| t.scope == s);
 
@@ -328,7 +441,9 @@ fn run_cleanup(dir: &Path, kind: Kind, sel: ScopeSel, reason: &str) -> Result<Cl
         write_path_value(HKEY_CURRENT_USER, USER_KEY, &new_scope_value(&report.user.entries, "User", &targets), ty)
             .map_err(|e| format!("{e} (sauvegarde : {file_name})"))?;
     }
-    Ok(CleanupResult { removed: targets, skipped_unsafe: skipped, backup_file: Some(file_name) })
+    // Écriture réussie : prévenir Windows pour que les nouveaux processus voient le changement.
+    let broadcast = broadcast_environment_change();
+    Ok(CleanupResult { removed: targets, skipped_unsafe: skipped, backup_file: Some(file_name), broadcast })
 }
 
 // ───────────────────────── Commandes Tauri ─────────────────────────
@@ -350,19 +465,23 @@ pub async fn create_registry_backup(app: tauri::AppHandle) -> Result<String, Str
 /// Restaure une sauvegarde (par nom de fichier). Une sauvegarde de l'état actuel
 /// est créée juste avant, pour pouvoir annuler la restauration.
 #[tauri::command]
-pub async fn restore_registry_backup(app: tauri::AppHandle, backup_file: String) -> Result<(), String> {
+pub async fn restore_registry_backup(app: tauri::AppHandle, backup_file: String) -> Result<bool, String> {
     let dir = backups_dir(&app)?;
     let b = load_backup(&resolve_backup_file(&dir, &backup_file)?)?;
-    let current = snapshot("avant-restauration")?;
+    let var_names: Vec<String> = b.touched_variables.keys().cloned().collect();
+    let current = snapshot_with_vars("avant-restauration", &var_names)?;
 
     let changes = |new: &Option<ScopeBackup>, old: &Option<ScopeBackup>| new.is_some() && new != old;
     let do_system = changes(&b.system, &current.system);
     let do_user = changes(&b.user, &current.user);
+    // Variables touchées par un profil : à remettre comme avant (ou à supprimer si elles n'existaient pas).
+    let var_changes: Vec<(&String, &Option<ScopeBackup>)> =
+        b.touched_variables.iter().filter(|(n, old)| current.touched_variables.get(*n) != Some(*old)).collect();
     if do_system && !can_write(HKEY_LOCAL_MACHINE, SYSTEM_KEY) {
         return Err(admin_error("Restaurer le PATH Système"));
     }
-    if !do_system && !do_user {
-        return Ok(());
+    if !do_system && !do_user && var_changes.is_empty() {
+        return Ok(false);
     }
     write_backup(&dir, &current)?;
     if let (true, Some(s)) = (do_system, &b.system) {
@@ -371,7 +490,13 @@ pub async fn restore_registry_backup(app: tauri::AppHandle, backup_file: String)
     if let (true, Some(s)) = (do_user, &b.user) {
         write_path_value(HKEY_CURRENT_USER, USER_KEY, &s.raw, &s.value_type)?;
     }
-    Ok(())
+    for (name, old) in var_changes {
+        match old {
+            Some(s) => write_user_var(name, &s.raw, &s.value_type)?,
+            None => delete_user_var(name)?,
+        }
+    }
+    Ok(broadcast_environment_change())
 }
 
 /// Les 10 sauvegardes les plus récentes.
@@ -447,6 +572,7 @@ mod tests {
             reason: "manuelle".into(),
             user: Some(ScopeBackup { value_type: "REG_EXPAND_SZ".into(), raw: r"%USERPROFILE%\bin;C:\Café".into() }),
             system: None,
+            touched_variables: BTreeMap::new(),
         };
         let json = serde_json::to_string_pretty(&b).unwrap();
         assert!(json.contains("\"value_type\": \"REG_EXPAND_SZ\""));
@@ -458,7 +584,7 @@ mod tests {
     #[test]
     fn backup_invalide_refuse() {
         let ok = ScopeBackup { value_type: "REG_SZ".into(), raw: "C:\\a".into() };
-        let mk = |v: u32, s: ScopeBackup| Backup { version: v, created_at: String::new(), reason: String::new(), user: Some(s), system: None };
+        let mk = |v: u32, s: ScopeBackup| Backup { version: v, created_at: String::new(), reason: String::new(), user: Some(s), system: None, touched_variables: BTreeMap::new() };
         assert!(validate_backup(&mk(2, ok.clone())).is_err());
         assert!(validate_backup(&mk(1, ScopeBackup { value_type: "REG_BINARY".into(), raw: "x".into() })).is_err());
         assert!(validate_backup(&mk(1, ScopeBackup { value_type: "REG_SZ".into(), raw: "a\0b".into() })).is_err());
@@ -572,5 +698,21 @@ mod tests {
     #[test]
     fn erreur_admin_a_un_prefixe_stable() {
         assert!(admin_error("Modifier le PATH Système").starts_with("AdminRequired: "));
+    }
+
+    #[test]
+    fn ancienne_sauvegarde_sans_variables_reste_lisible_et_variables_validees() {
+        let old = r#"{"version":1,"created_at":"t","reason":"manuelle","user":null,"system":null}"#;
+        let b: Backup = serde_json::from_str(old).unwrap();
+        assert!(b.touched_variables.is_empty() && validate_backup(&b).is_ok());
+
+        let mut b2 = b.clone();
+        b2.touched_variables.insert("EDITOR".into(), Some(ScopeBackup { value_type: "REG_SZ".into(), raw: "vim".into() }));
+        b2.touched_variables.insert("NOUVELLE".into(), None);
+        let back: Backup = serde_json::from_str(&serde_json::to_string(&b2).unwrap()).unwrap();
+        assert_eq!(back, b2);
+        assert!(validate_backup(&b2).is_ok());
+        b2.touched_variables.insert("MAUVAISE".into(), Some(ScopeBackup { value_type: "REG_DWORD".into(), raw: "1".into() }));
+        assert!(validate_backup(&b2).is_err());
     }
 }

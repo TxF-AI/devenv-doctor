@@ -13,6 +13,8 @@
 
       <div id="admin-banner" class="mb-3 rounded border px-3 py-2 text-sm"></div>
 
+      <div id="sync-badge" class="mb-3 hidden rounded border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300" role="status"></div>
+
       <div id="actions" class="mb-3 flex flex-wrap items-center gap-2">
         <button id="btn-backup" class="rounded border border-cyan-400 bg-cyan-400/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-400/20">🛡️ Sauvegarder le Registre</button>
         <button id="btn-orphans" class="rounded border border-rose-500 bg-rose-500/10 px-3 py-1.5 text-sm text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 disabled:cursor-not-allowed">🧹 Supprimer les Orphelins</button>
@@ -33,9 +35,34 @@
       <div role="tablist" class="mb-3 flex gap-2">
         <button id="tab-user" role="tab" data-scope="user"></button>
         <button id="tab-system" role="tab" data-scope="system"></button>
+        <button id="tab-profiles" role="tab">🧬 Profils &amp; Dotfiles</button>
       </div>
-      <div id="meta" class="mb-3 text-xs text-zinc-500"></div>
-      <ul id="entries" class="space-y-2"></ul>
+      <div id="list-view">
+        <div id="meta" class="mb-3 text-xs text-zinc-500"></div>
+        <ul id="entries" class="space-y-2"></ul>
+      </div>
+
+      <div id="profiles-panel" class="hidden">
+        <p class="mb-3 text-xs text-zinc-500">
+          Un profil contient le PATH et les variables <b>utilisateur</b> (HKCU). Les variables dont le nom évoque un secret
+          (token, key, password…) ne sont jamais exportées, et ton nom d'utilisateur est remplacé par %USERPROFILE%.
+          Le PATH Système est exporté à titre informatif, jamais appliqué.
+        </p>
+        <div class="mb-4 rounded border border-zinc-800 bg-zinc-900 p-3">
+          <div class="mb-2 grid gap-2 sm:grid-cols-2">
+            <input id="profile-name" maxlength="64" value="Mon environnement" aria-label="Nom du profil" class="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm" />
+            <input id="profile-desc" maxlength="500" placeholder="Description (facultatif)" aria-label="Description" class="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm" />
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="btn-export" class="rounded border border-cyan-400 bg-cyan-400/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-400/20">📥 Exporter la conf (Dotfiles)</button>
+            <button id="btn-import" class="rounded border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-1.5 text-sm text-fuchsia-300 hover:bg-fuchsia-400/20">📤 Importer un profil</button>
+            <input id="file-import" type="file" accept=".json,application/json" class="hidden" />
+          </div>
+          <div id="export-result" class="mt-3 hidden text-xs text-zinc-400"></div>
+        </div>
+        <h2 class="mb-2 text-sm font-bold uppercase tracking-widest text-cyan-300">Presets</h2>
+        <ul id="presets" class="space-y-2 text-sm"></ul>
+      </div>
 
       <section class="mt-8">
         <h2 class="mb-2 text-sm font-bold uppercase tracking-widest text-cyan-300">Sauvegardes</h2>

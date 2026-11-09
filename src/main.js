@@ -10,6 +10,7 @@ const SCOPE_NAMES = { User: "Utilisateur", System: "Système", All: "Tout" };
 
 let report = null;
 let active = "user";
+let view = "user"; // "user" | "system" | "profiles"
 let isAdmin = false;
 let plans = { orphans: null, duplicates: null };
 
@@ -74,16 +75,19 @@ function renderCounters(all) {
 
 function renderList() {
   renderCounters([...report.user.entries, ...report.system.entries]);
+  const tabCls = (on) =>
+    "rounded border px-3 py-1 text-sm " +
+    (on ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300" : "border-zinc-700 text-zinc-400 hover:border-zinc-500");
   for (const key of Object.keys(SCOPES)) {
     const b = $(`#tab-${key}`);
     b.textContent = `${SCOPES[key].label} · ${report[key].entries.length}`;
-    b.setAttribute("aria-selected", String(key === active));
-    b.className =
-      "rounded border px-3 py-1 text-sm " +
-      (key === active
-        ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300"
-        : "border-zinc-700 text-zinc-400 hover:border-zinc-500");
+    b.setAttribute("aria-selected", String(view === key));
+    b.className = tabCls(view === key);
   }
+  $("#tab-profiles").setAttribute("aria-selected", String(view === "profiles"));
+  $("#tab-profiles").className = tabCls(view === "profiles");
+  $("#list-view").classList.toggle("hidden", view === "profiles");
+  $("#profiles-panel").classList.toggle("hidden", view !== "profiles");
   const r = report[active];
   const meta = $("#meta");
   meta.textContent = r.error
@@ -166,9 +170,22 @@ function toast(msg, kind = "ok") {
     "mb-3 rounded border px-3 py-2 text-sm break-all " +
     (kind === "error"
       ? "border-rose-500 bg-rose-500/10 text-rose-300"
-      : "border-cyan-400 bg-cyan-400/10 text-cyan-300");
+      : kind === "warn"
+        ? "border-amber-400 bg-amber-400/10 text-amber-300"
+        : "border-cyan-400 bg-cyan-400/10 text-cyan-300");
   clearTimeout(toastTimer);
   if (kind !== "error") toastTimer = setTimeout(() => t.classList.add("hidden"), 12000);
+}
+
+/** Retour visuel de la diffusion WM_SETTINGCHANGE ; renvoie la phrase à ajouter au message. */
+function notifySync(broadcast) {
+  const badge = $("#sync-badge");
+  if (broadcast) {
+    badge.textContent = `⚡ Variables Windows synchronisées en temps réel (${new Date().toLocaleTimeString("fr-FR")})`;
+    badge.classList.remove("hidden");
+    return " ⚡ Variables Windows synchronisées en temps réel.";
+  }
+  return " Registre modifié, mais la diffusion à Windows n'a pas abouti : redémarre tes terminaux pour voir le changement.";
 }
 
 // ─────────────── Modale de confirmation ───────────────
@@ -248,7 +265,9 @@ async function onCleanup(kind) {
   if (!ok) return;
   try {
     const res = await invoke(isOrphans ? "remove_orphans" : "deduplicate_paths", { scope });
-    toast(`${res.removed.length} entrée(s) supprimée(s). Sauvegarde : ${res.backup_file ?? "aucune (rien à faire)"}`);
+    const done = `${res.removed.length} entrée(s) supprimée(s). Sauvegarde : ${res.backup_file ?? "aucune (rien à faire)"}.`;
+    if (res.removed.length === 0) toast(done);
+    else toast(done + notifySync(res.broadcast), res.broadcast ? "ok" : "warn");
   } catch (err) {
     toast(isAdminError(err) ? `${err}` : `Échec : ${err}`, "error");
   }
@@ -269,10 +288,119 @@ async function onRestore(b) {
   });
   if (!ok) return;
   try {
-    await invoke("restore_registry_backup", { backupFile: b.file_name });
-    toast("Sauvegarde restaurée.");
+    const synced = await invoke("restore_registry_backup", { backupFile: b.file_name });
+    toast("Sauvegarde restaurée." + notifySync(synced), synced ? "ok" : "warn");
   } catch (err) {
     toast(`Restauration impossible : ${err}`, "error");
+  }
+  await refreshAll();
+}
+
+// ─────────────── Profils & Dotfiles ───────────────
+
+async function refreshPresets() {
+  const ul = $("#presets");
+  try {
+    const presets = await invoke("list_presets");
+    ul.replaceChildren(
+      ...presets.map((p) => {
+        const li = el("li", "flex items-start justify-between gap-3 rounded border border-zinc-800 bg-zinc-900 px-3 py-2");
+        const txt = el("div", "");
+        txt.append(el("div", "font-bold text-fuchsia-300", p.name), el("div", "text-xs text-zinc-400", p.description));
+        const btn = el("button", "shrink-0 rounded border border-fuchsia-400 px-2 py-1 text-xs text-fuchsia-300 hover:bg-fuchsia-400/10", "Aperçu & appliquer");
+        btn.addEventListener("click", () => onProfile(p));
+        li.append(txt, btn);
+        return li;
+      }),
+    );
+  } catch (err) {
+    ul.replaceChildren(el("li", "text-rose-400", `Presets indisponibles : ${err}`));
+  }
+}
+
+async function onExport() {
+  const box = $("#export-result");
+  try {
+    const r = await invoke("export_profile", { name: $("#profile-name").value, description: $("#profile-desc").value });
+    box.replaceChildren(
+      el("div", "text-emerald-300", `Profil exporté : ${r.path}`),
+      el("div", "", `${r.path_user_count} entrée(s) PATH Utilisateur · ${r.path_system_count} PATH Système (informatif) · ${r.variable_count} variable(s)`),
+    );
+    if (r.skipped_secrets.length) {
+      box.append(el("div", "text-amber-300", `Exclues (nom évoquant un secret) : ${r.skipped_secrets.join(", ")}`));
+    }
+    const copy = el("button", "mt-2 rounded border border-cyan-400 px-2 py-1 text-cyan-300 hover:bg-cyan-400/10", "Copier le JSON");
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(r.json);
+        copy.textContent = "Copié ✓";
+      } catch {
+        copy.textContent = "Copie refusée : ouvre le fichier ci-dessus";
+      }
+    });
+    box.append(copy);
+    box.classList.remove("hidden");
+    toast("Profil exporté. Il ne contient ni secret ni nom d'utilisateur : prêt pour un dépôt dotfiles.");
+  } catch (err) {
+    toast(`Export impossible : ${err}`, "error");
+  }
+}
+
+async function onImportFile(file) {
+  if (!file) return;
+  try {
+    const profile = await invoke("import_profile", { json: await file.text() });
+    await onProfile(profile);
+  } catch (err) {
+    toast(`Import impossible : ${err}`, "error");
+  } finally {
+    $("#file-import").value = ""; // permet de re-choisir le même fichier
+  }
+}
+
+/** Aperçu → modale de confirmation → application (le Rust recalcule le plan et sauvegarde). */
+async function onProfile(profile) {
+  let plan;
+  try {
+    plan = await invoke("preview_profile", { profile });
+  } catch (err) {
+    toast(`Profil refusé : ${err}`, "error");
+    return;
+  }
+  const items = [
+    ...plan.path_added.map((p) => ({ text: `+ PATH : ${p}` })),
+    ...plan.path_removed.map((p) => ({ text: `− PATH : ${p}` })),
+    ...plan.variables.map((v) => ({
+      text: `Variable ${v.name} = ${v.new}`,
+      sub: v.old === null ? "nouvelle variable" : `ancienne valeur : ${v.old}`,
+    })),
+    ...plan.notes.map((n) => ({ text: `ℹ ${n}` })),
+  ];
+  if (plan.new_user_path === null && plan.variables.length === 0) {
+    toast(`Profil « ${plan.name} » : rien à modifier, ton environnement est déjà conforme.` + (plan.notes.length ? ` (${plan.notes.join(" ; ")})` : ""));
+    return;
+  }
+  const ok = await confirmModal({
+    title: `Appliquer le profil « ${plan.name} » ?`,
+    intro: `${plan.path_added.length} ajout(s) et ${plan.path_removed.length} retrait(s) dans le PATH Utilisateur, ${plan.variables.length} variable(s) utilisateur.`,
+    items,
+    warning: plan.system_entries_ignored
+      ? `${plan.system_entries_ignored} entrée(s) PATH Système du profil sont ignorées (jamais appliquées).`
+      : "",
+    note: "Seul HKCU est modifié. Une sauvegarde automatique est créée avant l'écriture (restaurable, variables comprises).",
+    confirmLabel: "Appliquer le profil",
+  });
+  if (!ok) return;
+  try {
+    const res = await invoke("apply_profile", { profile });
+    toast(
+      res.changed
+        ? `Profil appliqué (${res.variables_changed} variable(s), PATH ${res.path_changed ? "modifié" : "inchangé"}). Sauvegarde : ${res.backup_file}.` + notifySync(res.broadcast)
+        : "Rien à modifier.",
+      res.broadcast || !res.changed ? "ok" : "warn",
+    );
+  } catch (err) {
+    toast(`Échec : ${err}`, "error");
   }
   await refreshAll();
 }
@@ -294,9 +422,18 @@ window.addEventListener("DOMContentLoaded", () => {
   for (const key of Object.keys(SCOPES)) {
     $(`#tab-${key}`).addEventListener("click", () => {
       active = key;
+      view = key;
       if (report) renderList();
     });
   }
+  $("#tab-profiles").addEventListener("click", () => {
+    view = "profiles";
+    if (report) renderList();
+  });
+  $("#btn-export").addEventListener("click", onExport);
+  $("#btn-import").addEventListener("click", () => $("#file-import").click());
+  $("#file-import").addEventListener("change", (e) => onImportFile(e.target.files[0]));
+  refreshPresets();
   $("#btn-backup").addEventListener("click", onBackup);
   $("#btn-orphans").addEventListener("click", () => onCleanup("orphans"));
   $("#btn-dups").addEventListener("click", () => onCleanup("duplicates"));
