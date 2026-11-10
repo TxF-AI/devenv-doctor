@@ -1,4 +1,4 @@
-# DevEnv Doctor (v0.3.1)
+# DevEnv Doctor (v0.4.0)
 
 🇬🇧 [English version](README.md)
 
@@ -53,10 +53,11 @@ Avant toute écriture, une **modale de confirmation en mode « diff Git »** mon
 - ⚠️ **Détection des conflits** : repère les binaires de même nom présents dans plusieurs dossiers du PATH (`python.exe`, `node.exe`, `git.exe`…), indique lequel Windows lance et lesquels sont masqués. Les ⬆ / ⬇ de chaque ligne règlent la priorité.
 - 🛡️ **Sécurité & Backups** : aucune écriture sans aperçu en « diff » et confirmation. Une sauvegarde JSON est créée automatiquement dans `%APPDATA%\com.txfai.devenvdoctor\backups\`, avec **restauration en un clic**. Modifier le PATH Système demande de lancer l'application en administrateur.
 - 📜 **Export Dotfiles & PowerShell** : export du PATH et des variables utilisateur en JSON (profils et presets `Minimal Clean`, `WebDev`, `GameDev`) ou en script `setup-env.ps1` autonome pour reconfigurer un PC vierge. Les exports ne contiennent **ni secrets** (variables dont le nom évoque un token, une clé ou un mot de passe) **ni nom d'utilisateur**.
+- 📋 **Diagnostic pour IA** : le bouton **Diagnostic IA** copie un résumé Markdown de votre PATH (longueurs et risque, entrées cassées, doublons, exécutables masqués avec les deux chemins) suivi d'une question toute prête, à coller dans Claude Code, Cursor ou un autre assistant IA. Votre nom d'utilisateur Windows est masqué, et rien n'est envoyé : le texte va seulement dans le presse-papiers.
 
 ## Installation
 
-1. Télécharge l'exécutable : **[devenv-doctor.exe (v0.3.1)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.3.1/devenv-doctor.exe)** (4,5 Mo), ou consulte la page de la [Release v0.3.1](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.3.1).
+1. Télécharge l'exécutable : **[devenv-doctor.exe (v0.4.0)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.4.0/devenv-doctor.exe)** (4,5 Mo), ou consulte la page de la [Release v0.4.0](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.4.0).
 2. Vérifie son empreinte :
 
    ```powershell
@@ -66,7 +67,7 @@ Avant toute écriture, une **modale de confirmation en mode « diff Git »** mon
    Le résultat doit être :
 
    ```
-   6CB91C0F109AB56AA489173DF836F6F3A4FE2A11F5D8F7CC758CF2E72212EF70
+   F7AE3776CDB8FB7507538E13DD132436D682939D0F1B1228F6B766FCAB51A147
    ```
 
 3. Double-clique sur `devenv-doctor.exe`. Aucune installation : le fichier est portable.

@@ -1,4 +1,4 @@
-# DevEnv Doctor (v0.3.1)
+# DevEnv Doctor (v0.4.0)
 
 🇫🇷 [Version française](README.fr.md)
 
@@ -51,10 +51,11 @@ Before any write, a **"Git diff" style confirmation modal** shows exactly what w
 - ⚠️ **Conflict detection**: finds same-name binaries in several PATH folders (`python.exe`, `node.exe`, `git.exe`…), tells you which one Windows runs and which ones are shadowed. The ⬆ / ⬇ buttons on each row adjust priority.
 - 🛡️ **Safety & backups**: no write without a "diff" preview and confirmation. A JSON backup is created automatically in `%APPDATA%\com.txfai.devenvdoctor\backups\`, with **one-click restore**. Changing the System PATH requires running the app as administrator.
 - 📜 **Dotfiles & PowerShell export**: export the PATH and user variables as JSON (profiles and `Minimal Clean`, `WebDev`, `GameDev` presets) or as a standalone `setup-env.ps1` script to set up a fresh PC. Exports contain **no secrets** (variables whose name suggests a token, key or password) and **no user name**.
+- 📋 **Copy AI diagnostic**: the **AI diagnostic** button copies a Markdown summary of your PATH (lengths and risk, broken entries, duplicates, shadowed executables with both paths) followed by a ready-made question, to paste into Claude Code, Cursor or any AI assistant. Your Windows user name is masked, and nothing is sent anywhere: it only goes to your clipboard.
 
 ## Installation
 
-1. Download the executable: **[devenv-doctor.exe (v0.3.1)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.3.1/devenv-doctor.exe)** (4.5 MB), or see the [v0.3.1 release page](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.3.1).
+1. Download the executable: **[devenv-doctor.exe (v0.4.0)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.4.0/devenv-doctor.exe)** (4.5 MB), or see the [v0.4.0 release page](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.4.0).
 2. Check its hash:
 
    ```powershell
@@ -64,7 +65,7 @@ Before any write, a **"Git diff" style confirmation modal** shows exactly what w
    The result must be:
 
    ```
-   6CB91C0F109AB56AA489173DF836F6F3A4FE2A11F5D8F7CC758CF2E72212EF70
+   F7AE3776CDB8FB7507538E13DD132436D682939D0F1B1228F6B766FCAB51A147
    ```
 
 3. Double-click `devenv-doctor.exe`. No installation: the file is portable.

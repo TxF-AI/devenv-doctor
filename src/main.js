@@ -1,6 +1,7 @@
 import "./styles.css";
 import { icon, hydrateIcons } from "./icons.js";
 import { t, setLang, getLang, applyStatic } from "./i18n.js";
+import { buildPrompt } from "./diag.js";
 
 const { invoke } = window.__TAURI__.core;
 
@@ -596,6 +597,20 @@ async function refreshPresets() {
   }
 }
 
+/** Copie dans le presse-papiers un diagnostic du PATH à coller dans un assistant IA. */
+async function onDiag() {
+  if (!report) return;
+  try {
+    const version = await window.__TAURI__.app.getVersion();
+    await navigator.clipboard.writeText(
+      buildPrompt({ version, isAdmin, entries: allEntries(), lengths, conflicts: [...conflicts.values()], numberOf, now: new Date() }),
+    );
+    toast(t("diag_copied"));
+  } catch {
+    toast(t("diag_failed"), "error");
+  }
+}
+
 /** Bouton « Copier » : bascule en « Copié » ; le texte copié vient du backend. */
 function copyButton(label, text) {
   const copy = el("button", "btn sm");
@@ -794,6 +809,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#btn-orphans").addEventListener("click", () => onCleanup("orphans"));
   $("#btn-dups").addEventListener("click", () => onCleanup("duplicates"));
   $("#btn-compress").addEventListener("click", onCompress);
+  $("#btn-diag").addEventListener("click", onDiag);
   $("#btn-script").addEventListener("click", onExportScript);
   $("#scope-select").addEventListener("change", refreshPlans);
 
