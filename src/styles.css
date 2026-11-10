@@ -17,7 +17,36 @@
   --warn: #ffb020;
   --font: "JetBrains Mono", "Fira Code", "Cascadia Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --t: 120ms;
+  --row-line: #14171f;
+  --del-text: #ff9fb6;
+  --add-text: #7dffc6;
+  --hover: rgba(255,255,255,.02);
+  color-scheme: dark;
 }
+
+/* Thème clair : mêmes rôles, couleurs de statut assombries pour rester lisibles sur fond clair. */
+:root[data-theme="light"] {
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #f7f8fb;
+  --line: #d9deea;
+  --line-2: #c5ccdb;
+  --line-3: #a9b2c6;
+  --text: #1a2030;
+  --muted: #566078;
+  --dim: #8089a0;
+  --ok: #0a8a57;
+  --info: #0277bd;
+  --bad: #d11a45;
+  --warn: #b25e00;
+  --row-line: #e6e9f1;
+  --del-text: #a8123a;
+  --add-text: #0a6b45;
+  --hover: rgba(20,30,50,.04);
+  color-scheme: light;
+}
+:root[data-theme="light"] .toast, :root[data-theme="light"] dialog { box-shadow: 0 10px 32px rgba(30,40,60,.18); }
+:root[data-theme="light"] dialog::backdrop { background: rgba(40,48,66,.35); }
 
 html, body { height: 100%; }
 body {
@@ -42,7 +71,7 @@ body {
   height: 40px; padding: 0 14px;
   border-bottom: 1px solid var(--line); background: var(--surface);
 }
-.brand { display: flex; align-items: center; gap: 8px; color: var(--info); }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--info); white-space: nowrap; flex: none; }
 .brand b { color: var(--text); font-weight: 600; letter-spacing: .02em; }
 .ver { color: var(--dim); font-size: 10px; border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; }
 .nav { display: flex; gap: 2px; margin-left: 8px; }
@@ -51,7 +80,7 @@ body {
   color: var(--muted); border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer;
   transition: color var(--t), border-color var(--t), background-color var(--t);
 }
-.navbtn:hover { color: var(--text); background: rgba(255,255,255,.02); }
+.navbtn:hover { color: var(--text); background: var(--hover); }
 .navbtn[aria-selected="true"] { color: var(--text); border-bottom-color: var(--info); }
 .pill {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px;
@@ -59,6 +88,10 @@ body {
 }
 .pill.ok { color: var(--ok); border-color: rgba(0,255,157,.3); background: rgba(0,255,157,.05); }
 .pill.warn { color: var(--warn); border-color: rgba(255,176,32,.35); background: rgba(255,176,32,.06); }
+/* La barre du haut ne passe jamais sur deux lignes : la pastille Admin se raccourcit en premier. */
+.navbtn { white-space: nowrap; flex: none; }
+.pill { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#btn-theme { flex: none; padding-inline: 8px; }
 
 .toolbar {
   display: flex; align-items: center; gap: 8px; padding: 8px 14px;
@@ -147,7 +180,7 @@ thead th {
   background: var(--bg); border-bottom: 1px solid var(--line);
   color: var(--dim); font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
 }
-tbody td { padding: 3px 8px; border-bottom: 1px solid #14171f; vertical-align: top; }
+tbody td { padding: 3px 8px; border-bottom: 1px solid var(--row-line); vertical-align: top; }
 tbody tr { transition: background-color var(--t); }
 tbody tr:hover { background: var(--surface); }
 td.ind { width: 3px; padding: 0 !important; }
@@ -159,7 +192,7 @@ td.st, td.sc { width: 1%; white-space: nowrap; }
 td.path { word-break: break-all; }
 .exp { color: var(--muted); font-size: 11px; }
 .exp::before { content: "↳ "; color: var(--dim); }
-tr.orphan td.path .raw { color: #ff9fb6; }
+tr.orphan td.path .raw { color: var(--del-text); }
 .empty { padding: 28px; text-align: center; color: var(--dim); }
 
 .badge {
@@ -239,8 +272,8 @@ dialog::backdrop { background: rgba(5,6,10,.55); backdrop-filter: blur(12px); -w
 .dl .tx { flex: 1; padding: 1px 0; }
 .dl .sub { display: block; color: var(--dim); font-size: 10.5px; }
 .dl.hunk { color: var(--info); background: rgba(0,229,255,.06); padding: 2px 10px; }
-.dl.del { background: rgba(255,51,102,.10); color: #ff9fb6; } .dl.del .sym { color: var(--bad); }
-.dl.add { background: rgba(0,255,157,.08); color: #7dffc6; } .dl.add .sym { color: var(--ok); }
+.dl.del { background: rgba(255,51,102,.10); color: var(--del-text); } .dl.del .sym { color: var(--bad); }
+.dl.add { background: rgba(0,255,157,.08); color: var(--add-text); } .dl.add .sym { color: var(--ok); }
 .dl.ctx { color: var(--muted); }
 .dl.gap { color: var(--dim); font-style: italic; padding-left: 24px; }
 .dl.note { color: var(--muted); }

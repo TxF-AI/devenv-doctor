@@ -597,6 +597,26 @@ async function refreshPresets() {
   }
 }
 
+// ─────────────── Thème sombre / clair ───────────────
+
+let theme = (() => { try { return localStorage.getItem("theme") === "light" ? "light" : "dark"; } catch { return "dark"; } })();
+
+/** Applique le thème au document ; le bouton montre le thème vers lequel on bascule. */
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  const btn = $("#btn-theme");
+  const label = t(theme === "dark" ? "theme_to_light" : "theme_to_dark");
+  btn.textContent = theme === "dark" ? "☀️" : "🌙";
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+}
+
+function toggleTheme() {
+  theme = theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("theme", theme); } catch { /* stockage indisponible */ }
+  applyTheme();
+}
+
 /** Copie dans le presse-papiers un diagnostic du PATH à coller dans un assistant IA. */
 async function onDiag() {
   if (!report) return;
@@ -760,6 +780,7 @@ async function refreshAll() {
 // ── Langue : sélecteur FR / EN, transmis au backend (erreurs, risques, presets, script exporté) ──
 async function applyLanguage() {
   applyStatic();
+  applyTheme();
   $("#lang").value = getLang();
   const name = $("#profile-name");
   if (DEFAULT_PROFILE_NAMES.includes(name.value)) name.value = t("profile_name_default"); // nom par défaut non modifié
@@ -810,6 +831,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("#btn-dups").addEventListener("click", () => onCleanup("duplicates"));
   $("#btn-compress").addEventListener("click", onCompress);
   $("#btn-diag").addEventListener("click", onDiag);
+  $("#btn-theme").addEventListener("click", toggleTheme);
   $("#btn-script").addEventListener("click", onExportScript);
   $("#scope-select").addEventListener("change", refreshPlans);
 

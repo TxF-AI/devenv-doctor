@@ -4,7 +4,7 @@
 - **Projet :** DevEnv Doctor (Nettoyeur de %PATH% Windows, Profils Dev & Backup GitHub).
 - **Stack cible :** Rust (Backend) + Tauri v2 + Web Dark Mode / Cyberpunk (Frontend).
 - **Périmètre :** Manipulation sécurisée du Registre Windows (`HKCU\Environment` et `HKLM\SYSTEM\...`).
-- **Version courante :** v0.4.0 (dépôt public https://github.com/TxF-AI/devenv-doctor). La version affichée par l'app vient de `src-tauri/tauri.conf.json` : la garder égale à `Cargo.toml` et `package.json`.
+- **Version courante :** v0.5.0 (dépôt public https://github.com/TxF-AI/devenv-doctor). La version affichée par l'app vient de `src-tauri/tauri.conf.json` : la garder égale à `Cargo.toml` et `package.json`.
 
 ### Fonctionnalités (v0.2.0)
 - **Analyse (lecture seule) :** PATH Utilisateur (HKCU) et Système (HKLM) lus dans le Registre, `%VAR%` développées selon REG_SZ / REG_EXPAND_SZ ; statuts Valide / Orphelin / Doublon ; tableau dense avec recherche, filtres état et scope (Ctrl+F) ; longueur de chaque PATH avec risque (seuils 1024 / 2048 / 8192) ; conflits de binaires de même nom.

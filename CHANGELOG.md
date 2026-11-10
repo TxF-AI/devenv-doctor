@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0 (2026-11-10)
+
+- **Light theme**: a ☀️ / 🌙 button in the top bar; the choice is remembered. Status colors are darkened in the light theme to stay readable.
+- **Fix**: the top bar no longer wraps onto two lines; the administrator notice shortens first.
+
 ## 0.4.0 (2026-11-10)
 
 - **Copy AI diagnostic prompt**: an **AI diagnostic** button in the toolbar copies a Markdown summary of the PATH to the clipboard: HKCU / HKLM / effective length with risk level, number of entries, broken entries, duplicates and shadowed executables (with the winning and the shadowed path), admin status, followed by a ready-made task for an AI assistant (Claude Code, Cursor…). The prompt is always in English; the Windows user name is replaced by `<user>`. Nothing leaves the machine.
