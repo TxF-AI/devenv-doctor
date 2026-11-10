@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-11-10)
+
+- **Text polish**: proper plurals for the character count (`character` / `characters`, `caractère` / `caractères`) in the PATH compression messages.
+- **PATH compression note**: clearer wording explaining that Windows resolves the variables at launch, so the paths stay equivalent.
+- **Documentation**: bilingual "Who is it for?" section in both READMEs.
+
 ## 0.3.0 (2026-11-10)
 
 - **FR / EN language selector** (2026-11-09): the interface, the backend messages and the exported PowerShell script follow the chosen language. The choice is remembered; it defaults to the system language.

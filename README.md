@@ -1,4 +1,4 @@
-# DevEnv Doctor (v0.3.0)
+# DevEnv Doctor (v0.3.1)
 
 🇫🇷 [Version française](README.fr.md)
 
@@ -54,7 +54,7 @@ Before any write, a **"Git diff" style confirmation modal** shows exactly what w
 
 ## Installation
 
-1. Download the executable: **[devenv-doctor.exe (v0.3.0)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.3.0/devenv-doctor.exe)** (4.5 MB), or see the [v0.3.0 release page](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.3.0).
+1. Download the executable: **[devenv-doctor.exe (v0.3.1)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.3.1/devenv-doctor.exe)** (4.5 MB), or see the [v0.3.1 release page](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.3.1).
 2. Check its hash:
 
    ```powershell
@@ -64,7 +64,7 @@ Before any write, a **"Git diff" style confirmation modal** shows exactly what w
    The result must be:
 
    ```
-   1721F262ECA25B191405B5BD034DD272B750A8FD13F86FC9D77E44F6F675557E
+   6CB91C0F109AB56AA489173DF836F6F3A4FE2A11F5D8F7CC758CF2E72212EF70
    ```
 
 3. Double-click `devenv-doctor.exe`. No installation: the file is portable.

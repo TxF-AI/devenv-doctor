@@ -1,4 +1,4 @@
-# DevEnv Doctor (v0.3.0)
+# DevEnv Doctor (v0.3.1)
 
 🇬🇧 [English version](README.md)
 
@@ -56,7 +56,7 @@ Avant toute écriture, une **modale de confirmation en mode « diff Git »** mon
 
 ## Installation
 
-1. Télécharge l'exécutable : **[devenv-doctor.exe (v0.3.0)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.3.0/devenv-doctor.exe)** (4,5 Mo), ou consulte la page de la [Release v0.3.0](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.3.0).
+1. Télécharge l'exécutable : **[devenv-doctor.exe (v0.3.1)](https://github.com/TxF-AI/devenv-doctor/releases/download/v0.3.1/devenv-doctor.exe)** (4,5 Mo), ou consulte la page de la [Release v0.3.1](https://github.com/TxF-AI/devenv-doctor/releases/tag/v0.3.1).
 2. Vérifie son empreinte :
 
    ```powershell
@@ -66,7 +66,7 @@ Avant toute écriture, une **modale de confirmation en mode « diff Git »** mon
    Le résultat doit être :
 
    ```
-   1721F262ECA25B191405B5BD034DD272B750A8FD13F86FC9D77E44F6F675557E
+   6CB91C0F109AB56AA489173DF836F6F3A4FE2A11F5D8F7CC758CF2E72212EF70
    ```
 
 3. Double-clique sur `devenv-doctor.exe`. Aucune installation : le fichier est portable.
