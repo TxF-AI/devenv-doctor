@@ -12,7 +12,7 @@ body:
     attributes:
       label: DevEnv Doctor version
       description: Shown in the window title or on the Release page.
-      placeholder: "0.2.0"
+      placeholder: "0.3.0"
     validations:
       required: true
   - type: input
