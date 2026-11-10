@@ -14,6 +14,12 @@ Au fil des installations (Python, Node, Java, Git, SDK…), le `PATH` se remplit
 
 Application de bureau native (Rust + Tauri v2), un seul exécutable de moins de 5 Mo. Rien n'est envoyé sur Internet.
 
+## 🎯 Pour qui ?
+
+* **Les personnes qui codent avec des outils d'IA (Cursor, Claude Code, Copilot) :** quand un projet fraîchement généré répond « commande introuvable » ou prend le mauvais `python` / `node`, voyez en quelques secondes quelles entrées du `PATH` sont cassées, en double ou masquées, et corrigez-les avec aperçu et sauvegarde automatique.
+* **Les développeurs et les équipes :** nettoyez un `PATH` long et brouillon sur une machine neuve ou ancienne, repérez les conflits de version entre plusieurs installations et exportez un script PowerShell pour reconstruire votre environnement sur un PC vierge.
+* **Quiconque a atteint la limite de 1024 caractères de `setx` :** voyez la vraie longueur de votre `PATH` et compressez-le sans risque.
+
 ## 🎨 Aperçu de l'Interface
 
 ![Démonstration Animée](assets/demo.fr.gif)

@@ -14,6 +14,12 @@ Over the years of installing Python, Node, Java, Git, SDKs…, the `PATH` fills 
 
 Native desktop app (Rust + Tauri v2), a single executable under 5 MB. Nothing is sent over the Internet. The interface is available in **French and English** (FR/EN selector in the top bar; defaults to the system language and is remembered).
 
+## 🎯 Who is it for?
+
+* **People coding with AI tools (Cursor, Claude Code, Copilot):** when a freshly generated project says "command not found" or picks the wrong `python` / `node`, see in seconds which `PATH` entries are broken, duplicated or shadowed, and fix them with a preview and an automatic backup.
+* **Developers and teams:** clean up a long, messy `PATH` on a new or old machine, spot version conflicts between several installs, and export a PowerShell script to rebuild your setup on a fresh PC.
+* **Anyone who hit the `setx` 1024-character limit:** see how long your `PATH` really is and compress it safely.
+
 ## 🎨 Interface preview
 
 ![Animated demo](assets/demo.gif)
