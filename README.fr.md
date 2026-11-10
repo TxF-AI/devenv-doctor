@@ -16,9 +16,9 @@ Application de bureau native (Rust + Tauri v2), un seul exécutable de moins de 
 
 ## 🎯 Pour qui ?
 
-* **Les personnes qui codent avec des outils d'IA (Cursor, Claude Code, Copilot) :** quand un projet fraîchement généré répond « commande introuvable » ou prend le mauvais `python` / `node`, voyez en quelques secondes quelles entrées du `PATH` sont cassées, en double ou masquées, et corrigez-les avec aperçu et sauvegarde automatique.
-* **Les développeurs et les équipes :** nettoyez un `PATH` long et brouillon sur une machine neuve ou ancienne, repérez les conflits de version entre plusieurs installations et exportez un script PowerShell pour reconstruire votre environnement sur un PC vierge.
-* **Quiconque a atteint la limite de 1024 caractères de `setx` :** voyez la vraie longueur de votre `PATH` et compressez-le sans risque.
+* **Développeurs assistés par IA (Cursor, Claude Code, Copilot) :** Résolvez rapidement les erreurs « commande introuvable » causées par des variables PATH cassées ou mal configurées lors de vos sessions de dev avec l'IA.
+* **Ingénieurs & Équipes Dev :** Auditez vos variables PATH en quelques secondes : détectez les entrées en double ou masquées et les conflits de versions, et contournez la limite de 1024 caractères de `setx` grâce à la compression et à l'export PowerShell natif.
+* **Administrateurs Système :** Assainissez les variables d'environnement PATH sur vos postes de travail sans passer par des modifications manuelles complexes.
 
 ## 🎨 Aperçu de l'Interface
 
