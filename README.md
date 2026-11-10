@@ -100,6 +100,7 @@ Without `--no-bundle`, Tauri downloads WiX and NSIS to produce MSI and setup ins
 | `src-tauri/src/optimize.rs` | PATH length, compression, reordering, conflicts |
 | `src-tauri/src/profiles.rs` | profiles, presets, JSON and PowerShell script export |
 | `src/`, `index.html` | interface (JavaScript, Vite, Tailwind) |
+| `CHANGELOG.md` | what changed in each version, with dates |
 | `CLAUDE.md` | project memory: commands, conventions and lessons learned (in French) |
 
 ## 📜 License
