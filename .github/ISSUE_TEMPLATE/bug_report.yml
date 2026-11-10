@@ -1,76 +1,76 @@
 name: Bug report / Signaler un bug
-description: Quelque chose ne marche pas comme prévu dans DevEnv Doctor.
+description: Something does not work as expected in DevEnv Doctor (English or French).
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Merci de signaler le problème. **Ne colle ni mot de passe, ni jeton, ni nom d'utilisateur Windows** dans les logs ou les captures (masque-les).
+        Thanks for reporting the problem. **Do not paste passwords, tokens or your Windows user name** in logs or screenshots (redact them).
   - type: input
     id: app-version
     attributes:
-      label: Version de DevEnv Doctor
-      description: Indiquée dans le titre de la fenêtre ou sur la page de la Release.
+      label: DevEnv Doctor version
+      description: Shown in the window title or on the Release page.
       placeholder: "0.2.0"
     validations:
       required: true
   - type: input
     id: os-version
     attributes:
-      label: Version de Windows
-      description: "Commande `winver`, ou `[Environment]::OSVersion` dans PowerShell."
+      label: Windows version
+      description: "Run `winver`, or `[Environment]::OSVersion` in PowerShell."
       placeholder: "Windows 11 23H2 (build 22631)"
     validations:
       required: true
   - type: dropdown
     id: privileges
     attributes:
-      label: Lancé en administrateur ?
-      description: Modifier le PATH Système (HKLM) demande les droits administrateur.
+      label: Run as administrator?
+      description: Changing the System PATH (HKLM) requires administrator rights.
       options:
-        - Non
-        - Oui
-        - Je ne sais pas
+        - "No"
+        - "Yes"
+        - I don't know
     validations:
       required: true
   - type: dropdown
     id: area
     attributes:
-      label: Zone concernée
+      label: Area
       options:
-        - Analyse du PATH (orphelins, doublons, conflits)
-        - Nettoyage / compression / réordonnancement
-        - Sauvegarde / restauration
-        - Profils / export JSON / export PowerShell
+        - PATH analysis (orphans, duplicates, conflicts)
+        - Cleanup / compression / reordering
+        - Backup / restore
+        - Profiles / JSON export / PowerShell export
         - Interface
-        - Autre
+        - Other
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Comportement attendu
+      label: Expected behavior
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: Comportement observé
+      label: Actual behavior
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Étapes pour reproduire
+      label: Steps to reproduce
       placeholder: |
-        1. Ouvrir l'onglet PATH
-        2. Cliquer sur « Orphelins »
+        1. Open the PATH tab
+        2. Click "Orphans"
         3. ...
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Logs, message d'erreur, captures d'écran
-      description: "Glisse les images ici. Les sauvegardes JSON contiennent tes chemins (ne les joins qu'après relecture)."
+      label: Logs, error message, screenshots
+      description: "Drop images here. JSON backups contain your paths (attach them only after reviewing)."

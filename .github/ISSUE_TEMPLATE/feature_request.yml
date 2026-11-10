@@ -1,42 +1,42 @@
 name: Feature request / Proposer une fonctionnalité
-description: Une idée pour améliorer DevEnv Doctor.
+description: An idea to improve DevEnv Doctor (English or French).
 title: "[Feature] "
 labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: Problème à résoudre
-      description: Quelle situation concrète te pose problème aujourd'hui ?
-      placeholder: "Quand j'installe plusieurs versions de Python, je dois ..."
+      label: Problem to solve
+      description: Which concrete situation is a problem for you today?
+      placeholder: "When I install several Python versions, I have to ..."
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
-      label: Solution proposée
-      description: Comment imagines-tu que ça fonctionne (interface, comportement) ?
+      label: Proposed solution
+      description: How do you imagine it working (interface, behavior)?
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives envisagées
-      description: Contournements actuels, autres outils.
+      label: Alternatives considered
+      description: Current workarounds, other tools.
   - type: dropdown
     id: scope
     attributes:
-      label: Concerne
+      label: Area
       options:
-        - PATH Utilisateur (HKCU)
-        - PATH Système (HKLM)
-        - Variables d'environnement
-        - Profils / export
+        - User PATH (HKCU)
+        - System PATH (HKLM)
+        - Environment variables
+        - Profiles / export
         - Interface
-        - Autre
+        - Other
   - type: checkboxes
     id: safety
     attributes:
-      label: Sécurité
+      label: Safety
       options:
-        - label: Je comprends que toute écriture dans le Registre doit rester précédée d'un aperçu, d'une confirmation et d'une sauvegarde.
+        - label: I understand that any Registry write must stay preceded by a preview, a confirmation and a backup.
